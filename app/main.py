@@ -20,6 +20,15 @@ from .server import run_server
 DEFAULT_PORT = 8790  # 浏览器扩展默认连接的端口
 
 
+class StudioDialogs:
+    def choose_folder(self):
+        import webview
+        window = webview.windows[0]
+        kind = webview.FileDialog.FOLDER if hasattr(webview, 'FileDialog') else webview.FOLDER_DIALOG
+        paths = window.create_file_dialog(kind)
+        return str(paths[0]) if paths else ''
+
+
 def _free_port() -> int:
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(("127.0.0.1", 0))
@@ -99,8 +108,9 @@ def main() -> int:
         import webview  # type: ignore
 
         window = webview.create_window(
-            "XPath Studio · 定位编辑器",
+            "WBot Studio · Python 编码版",
             url,
+            js_api=StudioDialogs(),
             width=1440,
             height=900,
             min_size=(1080, 680),

@@ -144,9 +144,11 @@ def main() -> int:
         # 静态资源
         with urllib.request.urlopen(BASE + "/", timeout=10) as r:
             html = r.read().decode("utf-8")
-        print(f"[2] GET /            -> {r.status}, 含标题: {'XPath Studio' in html}")
+        assert 'WBot Studio' in html or 'XPath Studio' in html, '桌面标题缺失'
+        print(f"[2] GET /            -> {r.status}, 桌面标题已确认")
         served: dict[str, bytes] = {"index.html": html.encode("utf-8")}
-        for asset in ("app.js", "style.css", "app.ico", "element-library.js", "element-library.css"):
+        for asset in ("app.js", "style.css", "app.ico", "element-library.js", "element-library.css",
+                      "studio.js", "studio.css", "vendor/monaco/vs/loader.js"):
             try:
                 with urllib.request.urlopen(f"{BASE}/{asset}", timeout=10) as r:
                     served[asset] = r.read()

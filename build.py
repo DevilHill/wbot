@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 import os
+import argparse
 import shutil
 import subprocess
 import sys
@@ -19,7 +20,11 @@ EXT_DIR = os.path.join(ROOT, "extension")
 
 
 def main() -> int:
-    console = "--console" in sys.argv
+    parser = argparse.ArgumentParser(description='构建 XPath / WBot Studio 桌面版')
+    parser.add_argument('--console', action='store_true')
+    parser.add_argument('--distpath', default='dist', help='输出目录，可避免覆盖正在运行的旧版')
+    args = parser.parse_args()
+    console = args.console
     sep = ";" if os.name == "nt" else ":"
 
     if not os.path.isdir(EXT_DIR):
@@ -31,6 +36,7 @@ def main() -> int:
         "--clean",
         "--onefile",
         "--name", "XPathStudio",
+        "--distpath", args.distpath,
         "--add-data", f"app/web{sep}web",
         # 浏览器扩展随 exe 一起分发，供「一键安装」释放到稳定目录
         "--add-data", f"extension{sep}extension",
@@ -58,7 +64,7 @@ def main() -> int:
         print("\n[失败] PyInstaller 返回码", rc)
         return rc
 
-    exe = os.path.join(ROOT, "dist", "XPathStudio.exe")
+    exe = os.path.join(ROOT, args.distpath, "XPathStudio.exe")
     print("\n[完成] 产物：", exe if os.path.exists(exe) else "(未找到，请检查输出)")
     return 0
 

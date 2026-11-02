@@ -1,12 +1,13 @@
-# WBot 编码版
+# WBot Studio 编码版
 
-在 **VS Code 中编写 Python 自动化脚本**：使用 `wbot` 操作网页、管理元素库，并处理文件、文本、HTTP、ZIP 和 Excel。配套 **WBot Studio 0.4.0** 提供新建脚本、运行、调试、网页元素抓取和调用代码插入。
+独立的 Python 自动化编码桌面：**文件树、多标签、Monaco 编辑器、保存、运行/停止、实时日志**。抓取浏览器元素后，可将 XPath 插入代码，并在右侧工作台校验、同步高亮。
 
-- 自动化逻辑直接写在 `.py` 文件中，使用 Python 的函数、条件、循环和模块。
-- 通过 Microsoft Python Debugger 设置代码断点、单步执行、查看变量和调用栈。
-- 元素库支持分组、搜索、编辑、导入导出，以及在抓取页面校验 XPath。
+- 行号、语法高亮、折叠、查找替换、基础补全与 wbot 代码片段。
+- 新建/打开本机项目；保存时检测磁盘改动，避免覆盖外部修改。
+- 打包 EXE 内置 Python 与 wbot 基础运行环境；编辑器资源离线使用。
+- 保留元素库、抓取元素与 iframe 内的 XPath 校验。
 
-[VS Code 安装与使用](vscode-extension/README.md) · [wbot Python API 与范围](docs/wbot.md) · [浏览器扩展说明](extension/README.md)
+[编码界面](docs/images/studio-code.png) · [wbot API](docs/wbot.md) · [浏览器扩展](extension/README.md)
 
 ## 获取代码
 
@@ -17,90 +18,49 @@ cd xpath_tool
 
 ## 环境
 
-- Windows；[Python 3.10+](https://www.python.org/downloads/)，推荐 3.13。核心依赖 `lxml`，安装 wbot 时自动安装。
-- [VS Code 1.90+](https://code.visualstudio.com/) 用于安装 WBot Studio；代码调试还需要 **Microsoft Python Debugger**（`ms-python.debugpy`）。独立运行 Python 库不需要 VS Code。
-- Chrome / Edge 和配套浏览器扩展用于抓取元素、连接已有网页；纯文件与文本脚本无需浏览器。
-- [Git 2.x](https://git-scm.com/downloads/) 用于克隆；[Node.js 22](https://nodejs.org/en/download) 和 npm 用于构建、测试 VS Code 扩展。
+- Windows，推荐 [Python 3.13](https://www.python.org/downloads/)。
+- 原生窗口使用 [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。
+- Chrome / Edge 与配套扩展用于网页抓取；纯 Python 脚本无需浏览器。
 
-## 安装与试运行
-
-在仓库根目录创建 Python 环境并安装库：
+## 启动与使用
 
 ```powershell
 python -m venv .venv
-.\.venv\Scripts\python.exe -m pip install .
-.\.venv\Scripts\python.exe -X utf8 vscode-extension/examples/code-demo.py
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe run.py
 ```
 
-示例无需连接浏览器，会在日志中输出 `您好，WBot`。核心代码如下：
+也可用 `run.py --browser` 打开浏览器界面。服务只监听本机，默认端口 `8790`，被占用时顺延，以终端输出为准。
 
-```python
-from wbot import logging, strings
+1. 点击 **新建项目** 或 **打开项目**；浏览器模式直接填写本机目录完整路径。
+2. 在文件树打开 `.py`，或点击 **＋** 新建文件；可同时编辑多个标签。
+3. **Ctrl+S** 保存，**F5** 或“运行”执行当前 Python 文件，结果显示在下方日志。
+4. “停止”结束本次脚本及其子进程。运行前会保存已打开文件中的改动。
 
-logging.configure()
-message = "你好，WBot"
-message = strings.replace(message, "你好", "您好")
-logging.info(message)
-```
+### 网页抓取与代码插入
 
-需要 Excel 或独立 Playwright 浏览器时，安装相应可选依赖，见 [wbot 文档](docs/wbot.md)。
+1. 点击连接状态，在扩展页开启开发者模式，加载程序准备的扩展目录；刷新目标网页。
+2. 点击 **抓取元素**，切到网页，`Ctrl+左键` 锁定、`Enter` 确认。
+3. 在工作台点击 **插入代码**，把浏览器连接与定位代码插入当前 Python 文件；元素库记录也可插入。
+4. 点击 **校验** 同步高亮匹配节点；页面刷新、导航后需重新抓取，iframe 定位器仅在对应框架内有效。
 
-### 在 VS Code 中编码与调试
-
-1. 通过扩展面板的 **从 VSIX 安装** 安装 `wbot-studio-0.4.0.vsix`，然后打开本机项目文件夹并信任工作区。安装包可按下文从源码构建。
-2. 执行 **WBot: 选择 Python 解释器**，选中项目 `.venv` 中的 Python。尚未安装库时，执行 **WBot: 将 wbot 安装到所选 Python 环境**。
-3. 执行 **WBot: 新建 Python 自动化脚本**，保存为 `.py`。默认模板可直接运行；也可打开 [code-demo.py](vscode-extension/examples/code-demo.py)。
-4. 点击 Python 编辑器右上角的运行按钮，在集成终端查看输出。
-5. 安装 Microsoft Python Debugger，在替换文本的代码行左侧设置断点，再执行 **WBot: 调试当前 Python 脚本**。暂停后使用 VS Code 的单步、继续、变量和调用栈工具。
-
-升级到 0.4.0 后，扩展不再接管 `.wbot.json`，这些文件作为普通 JSON 打开。旧流程里的断点不会自动转换成 Python 代码断点。
-
-### 网页自动化与元素库
-
-1. 执行 **WBot: 启动 / 连接浏览器服务**，再执行 **WBot: 准备浏览器扩展目录**。
-2. 在 `chrome://extensions` 或 `edge://extensions` 开启开发者模式，加载已复制的扩展目录，然后刷新目标网页。
-3. 在 WBot 侧栏点击 **抓取元素**，切换到网页，`Ctrl+左键` 锁定、`Enter` 确认，回到 VS Code 保存元素名称和分组。
-4. 点击元素条目的代码图标，将调用插入当前 Python 文件；也可通过元素菜单复制 XPath 或校验并高亮。
-
-```python
-from wbot import web, selector
-
-browser = web.get(base_url="http://127.0.0.1:8790")
-elements = selector.SelectorStore()
-search = browser.find(elements.get("搜索框", group="首页"), timeout=5)
-search.input("wbot")
-```
-
-以上代码需要先在目标网页抓取并保存名为“搜索框”、分组为“首页”的元素。浏览器桥只监听本机，默认端口 `8790`；代码中的地址应与 VS Code 的 `wbot.bridgeUrl` 一致。刷新、导航或切换抓取目标后应重新抓取；iframe 内的定位器仅在相应框架有效。
-
-元素库默认保存在 `~/.xpath_studio/elements.sqlite3`，也可以直接使用 `wbot.ElementLibrary` API。更多示例和兼容范围见 [wbot 文档](docs/wbot.md)。
+独立桌面当前支持运行/停止和日志。源码断点、单步、变量与调用栈可使用已有的 [VS Code 扩展](vscode-extension/README.md)。额外 Python 依赖与 wbot 范围见 [模块说明](docs/wbot.md)。
 
 ## 构建与测试
 
-在仓库根目录执行：
-
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
-.\.venv\Scripts\python.exe -m pip wheel . --no-deps -w dist/wbot
-$env:WBOT_TEST_PYTHON = (Resolve-Path .\.venv\Scripts\python.exe).Path
-cd vscode-extension
-npm ci
-npm run prepare-runtime
-npm test
-npm run package
-& $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
+.\.venv\Scripts\python.exe build.py --distpath dist/1.5.0
+.\.venv\Scripts\python.exe tools/verify_exe.py --exe dist/1.5.0/XPathStudio.exe
+.\.venv\Scripts\python.exe tools/verify_studio_exe.py --exe dist/1.5.0/XPathStudio.exe
 ```
 
-产物为 `dist/wbot/wbot-0.1.0-py3-none-any.whl` 和 `dist/wbot-studio-0.4.0.vsix`。打包脚本从当前源码准备浏览器桥、浏览器扩展与 wbot 运行资源；VSIX 不包含可视化流程编辑器或桌面工作台页面。产物不提交到 Git，未配置自动发布。
+产物为 `dist/1.5.0/XPathStudio.exe`；修改界面后需重新打包。浏览器扩展可用 `tools/pack_extension.py` 打包，VS Code 扩展构建见其指南。
 
-VS Code 宿主测试、配置和故障排查见 [扩展指南](vscode-extension/README.md)。网页联动验证脚本位于 [tools/](tools/)；独立浏览器等可选测试需要对应依赖。
-
-仓库中的 `app/` 与 `extension/` 保留共享浏览器服务、定位引擎和抓取能力。编码版由 VS Code 启动桥服务，使用时无需打开桌面应用。
+Monaco 固定为 **0.57.0**，资源及许可证位于 [vendor/monaco](app/web/vendor/monaco/)。需要重取资源时运行 `tools/vendor_monaco.py`，脚本核对 npm SHA-512，不执行安装脚本。
 
 ## 贡献与许可
 
-通过 [Issues](https://github.com/DevilHill/xpath_tool/issues) 报告问题，附复现步骤和脱敏日志。PR 请说明改动与验证结果；定位算法改动需保持 Python / JavaScript 两端一致。
+通过 [Issues](https://github.com/DevilHill/xpath_tool/issues) 提交问题，附复现步骤和脱敏日志。PR 请说明验证结果；定位规则应保持 Python / JavaScript 两端一致。
 
-wbot 是独立实现的 Python 库，支持范围以 [模块说明](docs/wbot.md#模块与兼容范围) 为准，不声称完整兼容 xbot。
-
-本项目采用 [MIT 许可证](LICENSE)。
+本项目采用 [MIT 许可证](LICENSE)。wbot 为独立实现，不声称完整兼容 xbot。Monaco 的第三方许可见其 [LICENSE](app/web/vendor/monaco/LICENSE) 和 [ThirdPartyNotices.txt](app/web/vendor/monaco/ThirdPartyNotices.txt)。

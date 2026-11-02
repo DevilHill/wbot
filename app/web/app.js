@@ -48,7 +48,7 @@
     const cur = document.documentElement.getAttribute("data-theme");
     applyTheme(cur === "light" ? "dark" : "light");
   });
-  applyTheme(localStorage.getItem("xpath-studio-theme") || "light");
+  applyTheme(localStorage.getItem("xpath-studio-theme") || "dark");
 
   function scoreEl(score, level) {
     const cls = score >= 70 ? "stable" : score >= 45 ? "moderate" : "fragile";

@@ -84,6 +84,9 @@
         if (!window.XPSWorkbench?.useElement) throw new Error('工作台尚未就绪');
         window.XPSWorkbench.useElement(item);
         status(`已载入「${item.name}」；请在正确的页面和框架中校验。`);
+      }), button('插入代码', () => {
+        if (!window.WBotStudio) throw new Error('编码工作台尚未就绪');
+        window.WBotStudio.insertLocator(item);
       }), button('编辑', () => edit(item)), button('复制 wbot 代码', async () => {
         const py = value => JSON.stringify(String(value));
         const code = `from wbot import web, selector\n\nelements = selector.SelectorStore()\nbrowser = web.get(base_url=${py(window.location.origin)})\nelement = browser.find(elements.get(${py(item.name)}, group=${py(item.group)}))\nprint(element.get_text())\n`;

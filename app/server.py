@@ -224,6 +224,13 @@ class Handler(BaseHTTPRequestHandler):
     # ---- 路由 ----
     def do_GET(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
+        if path == '/api/studio/state':
+            if self.headers.get('Host') not in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}'):
+                self._send_json({'ok': False, 'error': '无效的本机地址'}, 403)
+                return
+            from .studio import STUDIO
+            self._send_json({'ok': True, **STUDIO.state()})
+            return
         if path in ("/api/elements", "/api/elements/export"):
             try:
                 library = element_library()
@@ -266,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):  # noqa: N802
         path = self.path.split("?", 1)[0]
-        if path.startswith(("/api/elements/", "/api/wbot/")):
+        if path.startswith(("/api/elements/", "/api/wbot/", "/api/studio/")):
             # Python本机调用没有Origin；浏览器写操作只接受本服务同源JSON请求。
             origin = self.headers.get("Origin")
             allowed = {f"http://127.0.0.1:{self.server.server_port}", f"http://localhost:{self.server.server_port}"}
@@ -281,6 +288,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._send_json({"ok": False, "error": "请求必须是小于2MiB的JSON"}, 400)
                 return
         body = self._read_json()
+        if path.startswith('/api/studio/'):
+            try:
+                from .studio import STUDIO
+                if (self.headers.get('Host') not in (f'127.0.0.1:{self.server.server_port}', f'localhost:{self.server.server_port}')
+                    or not isinstance(body, dict) or not isinstance(body.get('token'), str)
+                    or not secrets.compare_digest(body['token'], STUDIO.token)):
+                    self._send_json({'ok': False, 'error': '编码会话已失效，请刷新窗口'}, 403)
+                    return
+                project, relative = body.get('project'), body.get('path', '')
+                if path == '/api/studio/open': result = STUDIO.open_project(relative, bool(body.get('create')))
+                elif path == '/api/studio/tree': result = {'items': STUDIO.tree(project, relative)}
+                elif path == '/api/studio/read': result = STUDIO.read(project, relative)
+                elif path == '/api/studio/write':
+                    result = STUDIO.write(project, relative, body.get('text'), body.get('version'), bool(body.get('create')))
+                elif path == '/api/studio/run':
+                    result = STUDIO.run(project, relative, f'http://127.0.0.1:{self.server.server_port}', ELEMENTS_PATH)
+                elif path == '/api/studio/status': result = STUDIO.status()
+                elif path == '/api/studio/stop': result = STUDIO.stop()
+                else: raise ValueError('未知编码接口')
+                self._send_json({'ok': True, **result})
+            except (ValueError, OSError, UnicodeError, TypeError) as exc:
+                self._send_json({'ok': False, 'error': str(exc)}, 400)
+            return
         if path.startswith(("/api/elements/", "/api/wbot/")):
             try:
                 if not isinstance(body, dict):

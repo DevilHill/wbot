@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>XPath Studio · 定位编辑器</title>
+<title>WBot Studio · Python 编码版</title>
 <link rel="stylesheet" href="style.css" />
 <link rel="stylesheet" href="element-library.css" />
+<link rel="stylesheet" href="studio.css" />
 </head>
 <body>
 <div class="app">
@@ -19,12 +20,16 @@
         </svg>
       </div>
       <div class="brand-text">
-        <span class="brand-name">XPath Studio</span>
-        <span class="brand-sub">浏览器元素定位工作台</span>
+        <span class="brand-name">WBot Studio</span>
+        <span class="brand-sub">Python 编码版</span>
       </div>
     </div>
 
     <div class="topbar-actions">
+      <button class="btn ghost" id="studioOpen">打开项目</button>
+      <button class="btn ghost" id="studioSave" title="Ctrl+S">保存</button>
+      <button class="btn primary" id="studioRun" title="运行当前 Python 文件（F5）" disabled>▶ 运行</button>
+      <button class="btn ghost" id="studioStop" title="停止当前脚本" disabled>■ 停止</button>
       <button class="bridge-chip" id="bridgeChip" type="button" title="浏览器扩展连接状态 · 点击安装或查看扩展">
         <i></i><span id="bridgeChipText">扩展未连接</span>
       </button>
@@ -48,11 +53,56 @@
   </header>
 
   <!-- ================= 主工作区 ================= -->
-  <main class="workspace">
-    <section class="panel panel-xpath">
+  <main class="ide-shell" id="studioShell">
+    <nav class="activity-rail" aria-label="侧栏">
+      <button class="rail-button active" data-studio-view="files" title="文件" aria-label="文件">▤</button>
+      <button class="rail-button" data-studio-view="elements" title="元素库" aria-label="元素库">◇</button>
+      <button class="rail-button" data-studio-view="api" title="API 速查" aria-label="API 速查">{ }</button>
+      <button class="rail-button" id="studioLocatorToggle" title="显示或隐藏定位工作台" aria-label="定位工作台">⌖</button>
+    </nav>
+    <aside class="studio-sidebar">
+      <section id="studioFiles">
+        <header class="sidebar-heading"><strong>资源管理器</strong><span>
+          <button class="tree-tool" id="studioNewFile" title="新建文件" aria-label="新建文件">＋</button>
+          <button class="tree-tool" id="studioRefresh" title="刷新文件树" aria-label="刷新文件树">↻</button></span></header>
+        <div class="project-heading" id="studioProjectName">未打开项目</div>
+        <div id="studioTree" role="tree" aria-label="项目文件"></div>
+      </section>
+      <section id="elementLibrary" aria-label="元素库" hidden></section>
+      <section id="studioApi" class="api-reference" hidden>
+        <h3>Python / wbot</h3><p>点击插入示例；Ctrl+Space 显示基础补全。</p>
+        <button data-code="log">print · 输出日志</button>
+        <button data-code="sleep">sleep · 等待</button>
+        <button data-code="browser">web.get · 连接抓取页面</button>
+        <button data-code="element">browser.find · 元素定位</button>
+        <button data-code="text">element.get_text · 读取文本</button>
+        <button data-code="click">element.click · 点击</button>
+      </section>
+    </aside>
+    <section class="editor-column">
+      <div class="editor-tabs" id="studioTabs" role="tablist" aria-label="已打开文件"></div>
+      <div class="editor-surface">
+        <div id="studioEditor" aria-label="Python 代码编辑器"></div>
+        <div class="studio-welcome" id="studioWelcome">
+          <div class="welcome-mark">&lt;/&gt;</div><h1>WBot Studio</h1>
+          <p>编写 Python，抓取网页元素，运行自动化脚本。</p>
+          <div><button class="btn primary" id="studioCreate">新建项目</button>
+          <button class="btn" id="studioWelcomeOpen">打开项目</button></div>
+          <small>Ctrl+S 保存　·　F5 运行　·　Ctrl+Space 基础补全</small>
+        </div>
+      </div>
+      <div id="studioConsoleResize" class="console-resize" role="separator" aria-label="调整日志高度"></div>
+      <section class="studio-console" id="studioConsole">
+        <header><strong>运行日志</strong><span id="studioRunStatus">就绪</span>
+          <button class="tree-tool" id="studioClearLog">清空</button></header>
+        <pre id="studioLog" role="log" aria-label="运行日志">打开或新建项目后，选择 Python 文件运行。</pre>
+      </section>
+    </section>
+    <aside class="locator-pane" id="studioLocator">    <section class="panel panel-xpath">
       <div class="panel-head">
         <h2><span class="dot"></span>XPath 工作台</h2>
         <div class="head-tools">
+          <button class="btn ghost sm" id="studioInsert">插入代码</button>
           <button class="btn ghost sm" id="btnCopy">复制</button>
           <button class="btn ghost sm" id="btnClear">清空</button>
         </div>
@@ -86,8 +136,29 @@
         </section>
       </div>
     </section>
-    <section id="elementLibrary" aria-label="元素库"></section>
+</aside>
   </main>
+  <footer class="studio-statusbar"><span id="studioStatus">编辑器加载中…</span>
+    <span id="studioPosition">Python</span></footer>
+  <dialog id="studioProjectDialog" class="studio-dialog">
+    <form id="studioProjectForm"><h3 id="studioProjectTitle">打开项目</h3>
+      <label>目录路径<input id="studioProjectPath" required autocomplete="off" /></label>
+      <p class="hint" id="studioProjectHint">选择一个本机目录作为 Python 项目。</p>
+      <p id="studioProjectError" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="btn" id="studioBrowse">选择目录</button>
+        <button type="button" class="btn" id="studioProjectCancel">取消</button>
+        <button type="submit" class="btn primary">确定</button></div>
+    </form>
+  </dialog>
+  <dialog id="studioFileDialog" class="studio-dialog">
+    <form id="studioFileForm"><h3>新建文件</h3>
+      <label>项目内路径<input id="studioFilePath" required value="main.py" autocomplete="off" /></label>
+      <p class="hint">例如 main.py、helpers/utils.py。文件已存在时不会覆盖。</p>
+      <p id="studioFileError" role="alert"></p>
+      <div class="dialog-actions"><button type="button" class="btn" id="studioFileCancel">取消</button>
+        <button type="submit" class="btn primary">创建</button></div>
+    </form>
+  </dialog>
 </div>
 
 <!-- ================= 设置弹窗 ================= -->
@@ -201,5 +272,7 @@
 </div>
 
 <div id="toast" class="toast" hidden></div>
-<script src="app.js"></script><script src="element-library.js"></script></body>
+<script src="vendor/monaco/vs/loader.js"></script>
+<script src="app.js"></script><script src="element-library.js"></script><script src="studio.js"></script>
+</body>
 </html>

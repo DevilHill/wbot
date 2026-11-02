@@ -6,3 +6,9 @@ package-lock.json
 **/*.pyc
 **/*.sqlite3
 .vscode/**
+# 编码版不分发旧的流程编辑器或桌面工作台资源。
+media/flow-*
+src/flow-editor.js
+examples/*.wbot.json
+runtime/flow_runner.py
+runtime/app/web/**

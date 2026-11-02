@@ -18,14 +18,16 @@ python -m pip install ".[all]"
 
 也可以安装交付目录中的 `wbot-0.1.0-py3-none-any.whl`。基础依赖是 lxml；Excel 可选依赖 openpyxl；独立浏览器可选依赖 Playwright。桌面扩展桥模式不需要 Playwright。
 
-## 软件中的元素库
+## 编码版中的元素库
 
-运行新版 XPath Studio，刷新已安装的浏览器扩展后，在网页上抓取元素。工作台右侧的「元素库」可以：
+在 VS Code 安装 WBot Studio 编码版，启动浏览器服务、加载配套浏览器扩展后，即可抓取网页元素。WBot 侧栏的「元素库」可以：
 
-1. 保存当前 XPath，填写名称、分组和描述。
-2. 按名称、XPath、描述搜索，按分组筛选。
+1. 抓取并保存 XPath，填写名称、分组和描述。
+2. 搜索元素并按分组展示。
 3. 编辑、删除、导入／导出 JSON；导入可停止、跳过或替换同名记录。
-4. 点击「使用」载入工作台校验；点击「复制 wbot 代码」生成带当前服务端口的 Python 示例。
+4. 在抓取页面校验并高亮，或将元素调用代码插入当前 Python 文件。
+
+安装与操作见 [WBot Studio 编码版指南](../vscode-extension/README.md)。也可以直接用下文的 `ElementLibrary` API 管理元素，无需打开桌面工作台。
 
 默认保存为 `~/.xpath_studio/elements.sqlite3`，与 `SelectorStore()` 使用同一位置。设置 `WBOT_ELEMENT_LIBRARY` 环境变量可为桌面服务和 Python 库指定其他文件。库中 `(分组, 名称)` 唯一；导入整体提交，出错不保留一半数据。
 
@@ -33,7 +35,7 @@ python -m pip install ".[all]"
 
 ## 连接已抓取的网页
 
-先启动 XPath Studio 并完成一次抓取。端口默认 8790，被占用后以软件实际端口为准。
+先在 VS Code 执行 **WBot: 启动 / 连接浏览器服务** 并完成一次抓取。默认端口 8790；若配置了其他端口，代码中的 `base_url` 应与 `wbot.bridgeUrl` 一致。也可以连接已有的 XPath Studio 服务。
 
 ```python
 from wbot import web, selector

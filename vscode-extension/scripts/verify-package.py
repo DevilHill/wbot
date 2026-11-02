@@ -6,14 +6,24 @@ import zipfile
 
 extension = Path(__file__).resolve().parents[1]
 root = extension.parent
-package = root / 'dist/wbot-studio-0.3.0.vsix'
+source_manifest = json.loads((extension / 'package.json').read_text(encoding='utf-8'))
+package = root / f"dist/wbot-studio-{source_manifest['version']}.vsix"
 checked = 0
 with zipfile.ZipFile(package) as archive:
     names = set(archive.namelist())
     assert not any('/node_modules/' in name or '/test/' in name or name.endswith('.sqlite3') for name in names)
     manifest = json.loads(archive.read('extension/package.json'))
     assert manifest['capabilities']['untrustedWorkspaces']['supported'] is False
-    assert len(manifest['contributes']['commands']) == 24
+    commands = {item['command'] for item in manifest['contributes']['commands']}
+    assert len(commands) == 22
+    assert {'wbot.newScript', 'wbot.runFile', 'wbot.debugFile', 'wbot.pick',
+            'wbot.insertElement', 'wbot.startBridge', 'wbot.installRuntime'} <= commands
+    assert not {'wbot.newFlow', 'wbot.openWorkbench'} & commands
+    assert not manifest['contributes'].get('customEditors')
+    assert not any(event.startswith('onCustomEditor:') for event in manifest['activationEvents'])
+    forbidden = ('extension/media/flow-', 'extension/src/flow-editor.js',
+                 'extension/runtime/flow_runner.py', 'extension/runtime/app/web/')
+    assert not any(name.startswith(forbidden) or name.endswith('.wbot.json') for name in names)
     for name in names:
         if not name.startswith('extension/') or name.endswith('/'):
             continue
@@ -27,7 +37,7 @@ with zipfile.ZipFile(package) as archive:
             inside = relative.removeprefix('runtime/')
             if inside.startswith(('app/', 'wbot/', 'extension/')):
                 source = root / inside
-            elif inside in ('bridge_server.py', 'flow_runner.py'):
+            elif inside == 'bridge_server.py':
                 source = extension / 'scripts' / inside
         assert source.is_file(), source
         assert archive.read(name) == source.read_bytes(), name

@@ -4,9 +4,8 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const core = require('./src/core');
 const {BridgeManager} = require('./src/bridge');
-const {FlowEditor} = require('./src/flow-editor');
 
-let manager, flows;
+let manager;
 function activate(context) {
   const output = vscode.window.createOutputChannel('WBot');
   const runtime = path.join(context.extensionPath, 'runtime');
@@ -192,11 +191,7 @@ function activate(context) {
     await fs.writeFile(uri.fsPath,core.scriptTemplate(settings(uri)),{flag:'wx'});
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
   }
-  flows = new FlowEditor(context,{trusted,settings,pythonExecutable,api,output});
-  context.subscriptions.push(flows,vscode.window.registerCustomEditorProvider('wbot.flowEditor',flows,
-    {webviewOptions:{retainContextWhenHidden:true},supportsMultipleEditorsPerDocument:false}));
   const handlers = {
-    newFlow:() => flows.newFlow(),
     startBridge:start, stopBridge:async () => { const stopped = await manager.stop(); await refresh(true);
       vscode.window.showInformationMessage(stopped ? '已停止本扩展启动的服务' : '没有本扩展启动的服务；外部服务保持运行'); },
     refresh:() => refresh(), pick, saveLastPick, addElement:() => editRecord(),
@@ -222,7 +217,6 @@ function activate(context) {
     selectPython:async () => { const uris = await vscode.window.showOpenDialog({title:'选择 Python 可执行文件',canSelectMany:false,canSelectFolders:false});
       if (uris?.[0]) await vscode.workspace.getConfiguration('wbot').update('pythonPath',uris[0].fsPath,vscode.ConfigurationTarget.Global); },
     browserExtension:prepareBrowserExtension,
-    openWorkbench:() => vscode.env.openExternal(vscode.Uri.parse(settings().baseUrl)),
     showOutput:() => output.show(),
     help:async () => {
       let file = path.join(context.extensionPath,'README.md');
@@ -240,7 +234,7 @@ function activate(context) {
     vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('wbot')) refresh(true); }));
   if (vscode.workspace.isTrusted && !vscode.env.remoteName) refresh(true);
   // 供集成测试与其他扩展只读查看状态；不添加隐藏的执行命令。
-  return {refresh, getElements:() => structuredClone(records), provider, bridge:manager, flows};
+  return {refresh, getElements:() => structuredClone(records), provider, bridge:manager};
 }
-async function deactivate() { if (flows) await flows.dispose(); if (manager) await manager.stop(); }
+async function deactivate() { if (manager) await manager.stop(); }
 module.exports = {activate,deactivate};

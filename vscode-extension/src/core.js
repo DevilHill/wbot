@@ -25,11 +25,16 @@ function elementCode(record, options) {
     'print(element.get_text())\n';
 }
 function scriptTemplate(options) {
-  return '# 先在 WBot 侧栏抓取元素，再插入命名元素调用代码。\n' +
-    'from wbot import web, selector\n\n' +
-    `browser = web.get(base_url=${pyString(bridgeUrl(options.baseUrl))})\n` +
-    `elements = selector.SelectorStore(${pyString(libraryPath(options.libraryPath))})\n\n` +
-    'print("已连接：", browser.get_url())\n' +
+  return '# 安装 wbot 后可直接运行；在 message 赋值行设置断点，点击调试并单步查看变量。\n' +
+    'from wbot import logging, strings\n\n' +
+    'logging.configure()\n' +
+    'message = "你好，WBot"\n' +
+    'message = strings.replace(message, "你好", "您好")\n' +
+    'logging.info(message)\n\n' +
+    '# 网页自动化：先启动浏览器服务并抓取元素，再取消以下注释或从元素库插入代码。\n' +
+    '# from wbot import web, selector\n' +
+    `# browser = web.get(base_url=${pyString(bridgeUrl(options.baseUrl))})\n` +
+    `# elements = selector.SelectorStore(${pyString(libraryPath(options.libraryPath))})\n` +
     '# element = browser.find(elements.get("元素名称", group="默认"))\n' +
     '# print(element.get_text())\n';
 }

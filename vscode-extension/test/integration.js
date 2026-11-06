@@ -170,6 +170,22 @@ async function run() {
     assert.equal(result.bridge,base);
     assert.equal(result.count,1);
     check('真实 VS Code ProcessExecution 保存并运行 Python，参数、目录、元素库与环境正确');
+    const packageEntry = path.join(workspace,'package_entry.py');
+    await fs.writeFile(packageEntry,'print("initial")\n');
+    await fs.writeFile(path.join(workspace,'wbot.json'),JSON.stringify({
+      schemaVersion:1,name:'host-package',version:'0.1.0',entry:'package_entry.py',
+      files:['package_entry.py'],parameters:{},requirements:{}
+    }));
+    const packageEditor=await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(packageEntry));
+    await packageEditor.edit(edit=>edit.insert(new vscode.Position(0,0),'# package revision\n'));
+    assert.equal(packageEditor.document.isDirty,true);
+    const built=await vscode.commands.executeCommand('wbot.buildPackage');
+    assert.ok(built?.path,'构建命令应返回真实发布包路径');
+    await fs.access(built.path);
+    assert.equal(built.manifest.name,'host-package');
+    assert.equal(packageEditor.document.isDirty,false);
+    assert.ok((await fs.readFile(packageEntry,'utf8')).startsWith('# package revision'));
+    check('真实 VS Code 构建命令保存当前项目并生成带版本的自动化发布包');
     if(process.env.WBOT_TEST_DEBUGGER==='1') await verifyPythonDebugger(workspace,check);
     else report.skipped.push('Python debugpy 端到端测试：未传 --debugger-extension');
     await vscode.commands.executeCommand('wbot.stopBridge');

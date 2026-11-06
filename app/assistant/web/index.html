@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>WBot Assistant</title>
+  <link rel="stylesheet" href="/assistant.css">
+  <script src="/assistant.js" defer></script>
+</head>
+<body>
+  <aside class="sidebar">
+    <a class="brand" href="/" aria-label="WBot Assistant 首页"><span class="brand-mark">W</span><span>WBot<small>ASSISTANT</small></span></a>
+    <div class="nav-label">工作空间</div>
+    <nav aria-label="主导航">
+      <button class="nav-item active" data-view="automations" aria-current="page"><span>◇</span>我的自动化</button>
+      <button class="nav-item" data-view="history"><span>◷</span>运行记录</button>
+    </nav>
+    <div class="sidebar-footer"><span class="local-dot"></span>本地工作空间<p>自动化在这台电脑上执行</p></div>
+  </aside>
+  <main>
+    <header class="topbar"><span>个人工作台 <span class="separator">/</span> <span id="viewLabel">我的自动化</span></span>
+      <span id="connection" class="connection">正在连接后台服务…</span></header>
+    <div class="content">
+      <section class="page-heading"><div><div class="eyebrow">YOUR AUTOMATION WORKSPACE</div>
+        <h1 id="pageTitle">让重复的工作，自动完成。</h1><p id="pageDescription">选择一个自动化，填写参数，剩下的交给 WBot。</p></div>
+        <button class="primary" id="importButton">＋ 导入自动化</button></section>
+      <div id="message" class="message" role="status" hidden></div>
+      <section class="stats" aria-label="工作空间概览">
+        <div><span>可用自动化</span><strong id="packageCount">0</strong></div>
+        <div><span>正在执行</span><strong id="runningCount">0</strong></div>
+        <div><span>已完成运行</span><strong id="completedCount">0</strong></div>
+      </section>
+      <section id="automationsView" class="workspace">
+        <div class="catalog"><div class="section-heading"><h2>我的自动化</h2><span class="muted">已安装的版本</span></div>
+          <div id="packages" class="package-grid"></div>
+          <div id="emptyPackages" class="empty"><span class="empty-icon">◇</span><h3>准备好你的第一个自动化</h3>
+            <p>导入开发者提供的发布包，即可在这里运行。<br>无需打开编辑器，也无需修改代码。</p>
+            <button id="emptyImport">导入 .wbot.zip 发布包</button></div>
+        </div>
+        <aside class="detail-panel" aria-label="自动化详情">
+          <div id="noSelection" class="detail-empty"><span>↖</span><h3>选择一个自动化</h3><p>在这里查看说明、填写参数并启动。</p></div>
+          <form id="runForm" hidden><div class="eyebrow">AUTOMATION DETAILS</div><h2 id="selectedName"></h2>
+            <p id="selectedVersion" class="muted"></p><p class="section-label">运行参数</p><div id="parameters"></div>
+            <p id="noParameters" class="muted" hidden>这个自动化不需要填写参数。</p>
+            <button class="primary full-width" id="runButton" type="submit">▶ 开始运行</button>
+            <p class="run-note">关闭这个窗口后，后台任务仍会继续。</p>
+          </form>
+        </aside>
+      </section>
+      <section id="historyView" hidden>
+        <div class="section-heading"><h2>运行记录</h2><span class="muted">记录保存在这台电脑上</span></div>
+        <div class="history-layout"><div id="jobs" class="job-list"></div>
+          <section class="job-detail" aria-label="运行详情"><div id="emptyJob" class="detail-empty"><h3>查看一次运行</h3><p>选择记录，查看结果与日志。</p></div>
+            <div id="jobContent" hidden><div class="section-heading"><h2 id="jobTitle"></h2><button id="stopJob" class="danger">停止任务</button></div>
+              <p id="jobMetadata" class="muted"></p><p id="jobError" class="error-text" hidden></p>
+              <h3>运行结果</h3><pre id="jobResult" class="result"></pre><h3>执行日志</h3><pre id="jobLog" class="console"></pre></div>
+          </section></div>
+      </section>
+      <footer class="page-footer">本地执行预览版 <span>·</span> OC 连接与组织任务分发将在后续版本接入</footer>
+    </div>
+  </main>
+  <dialog id="importDialog"><form id="importForm"><div class="eyebrow">ADD AUTOMATION</div><h2>导入自动化</h2>
+    <p class="muted">选择你信任的开发者提供的 .wbot.zip 发布包。</p>
+    <label for="packagePath">发布包完整路径</label><input id="packagePath" name="path" required placeholder="例如 D:\Automations\order-export-1.0.0.wbot.zip" autocomplete="off">
+    <p class="field-help">在文件资源管理器中复制发布包路径，然后粘贴到这里。</p>
+    <p id="importError" class="error-text" role="alert" hidden></p>
+    <div class="dialog-actions"><button type="button" id="cancelImport">取消</button><button class="primary" id="confirmImport" type="submit">导入发布包</button></div>
+  </form></dialog>
+</body>
+</html>

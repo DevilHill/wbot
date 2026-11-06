@@ -2,7 +2,7 @@
 
 **WBot Studio 0.4.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。
 
-支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。默认脚本演示文本替换与日志，无需启动浏览器。
+支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可交给 Assistant 本地预览导入运行，使用说明见源码仓库的 `docs/assistant.md`。默认普通脚本演示文本替换与日志，无需启动浏览器。
 
 ## 安装与首次使用
 
@@ -28,6 +28,20 @@
 在示例的文本替换行暂停时，`message` 为 `你好，WBot`；执行这一行后变为 `您好，WBot`。代码断点与单步由 Python Debugger 处理。
 
 从旧版升级后，扩展不再接管 `.wbot.json`；已有文件可作为普通 JSON 查看，旧流程的断点不会自动转换为 Python 断点。
+
+## 自动化项目与发布包
+
+1. 执行 **WBot: 初始化自动化项目**，选择父目录并填写项目名称。命令创建新目录及 `wbot.json`、`main.py`，不会覆盖已有目录；完成后可选择“添加到工作区”。
+2. 编辑 `main.py` 和 `wbot.json`，声明入口、版本、文件白名单、输入参数及精确依赖。项目名使用英文字母或数字开头，只包含英文字母、数字、`_`、`-`，最多 80 位。
+3. 执行 **WBot: 构建自动化发布包**。命令先保存编辑内容；多工作区时使用当前编辑文件所属项目，没有对应项目时让你选择。
+4. 构建结果保存在项目 `dist/<name>-<version>.wbot.zip`，可点击提示在文件管理器中显示。相同输出不会覆盖；更改发布内容后先提高版本。
+5. 在 Assistant 中手工导入这个包，填写参数并运行。当前没有上传到 OC、部署或远程派发功能。
+
+这两个命令使用选定的 Python 和扩展内的包工具，不依赖浏览器服务运行。`wbot.json` 是新的项目清单，与旧版 `.wbot.json` 流程文件不同。
+
+初始化入口使用 `wbot.runtime.parameters()` 和 `runtime.set_result()`，需要 Assistant 提供运行上下文；当前请通过“构建 → 导入 → 运行”验证该示例。现有“运行当前 Python 脚本”和 Python Debugger 不会自动注入这一上下文，普通脚本运行调试继续保持原有行为。
+
+元素资产需要显式导出为 `wbot-elements` JSON，列入清单的 `files` 并填写 `elements` 路径。发布脚本应使用 `selector.SelectorStore()` 读取 Assistant 提供的任务元素库；从旧代码插入模板得到的个人绝对路径需移除，避免继续访问开发机全局库。清单完整示例、命令行用法、依赖与运行限制见源码仓库的 `docs/assistant.md`。
 
 ## 网页自动化与元素抓取
 
@@ -102,7 +116,7 @@ npm run package
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
 ```
 
-产物为仓库 `dist/wbot-studio-0.4.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含浏览器桥、抓取扩展、wbot 及其 wheel，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。
+产物为仓库 `dist/wbot-studio-0.4.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目包工具、浏览器桥、抓取扩展、wbot 及其 wheel，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按源码仓库的 `docs/assistant.md` 启动；VSIX 不作为 Assistant 桌面安装包。
 
 `npm test` 运行编码版与桥服务回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
 

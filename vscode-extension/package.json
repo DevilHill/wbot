@@ -17,6 +17,8 @@
   },
   "contributes": {
     "commands": [
+      {"command":"wbot.initProject","title":"初始化自动化项目","category":"WBot","icon":"$(new-folder)"},
+      {"command":"wbot.buildPackage","title":"构建自动化发布包","category":"WBot","icon":"$(package)"},
       {"command":"wbot.newScript","title":"新建 Python 自动化脚本","category":"WBot","icon":"$(new-file)"},
       {"command":"wbot.startBridge","title":"启动 / 连接浏览器服务","category":"WBot","icon":"$(plug)"},
       {"command":"wbot.stopBridge","title":"停止本扩展启动的服务","category":"WBot"},
@@ -42,9 +44,11 @@
     ],
     "viewsContainers": {"activitybar":[{"id":"wbot","title":"WBot","icon":"assets/wbot.svg"}]},
     "views": {"wbot":[{"id":"wbot.elements","name":"元素库","contextualTitle":"WBot 元素库"}]},
-    "viewsWelcome": [{"view":"wbot.elements","contents":"[＋ 新建 Python 自动化脚本](command:wbot.newScript)\n\n编写 .py 脚本，使用元素库插入网页自动化代码。\n[1. 选择 Python](command:wbot.selectPython)\n[2. 安装 wbot](command:wbot.installRuntime)\n[3. 启动浏览器服务](command:wbot.startBridge)\n[4. 准备浏览器扩展](command:wbot.browserExtension)\n[抓取元素](command:wbot.pick) · [使用指南](command:wbot.help)"}],
+    "viewsWelcome": [{"view":"wbot.elements","contents":"[初始化自动化项目](command:wbot.initProject) · [构建发布包](command:wbot.buildPackage)\n[＋ 新建 Python 自动化脚本](command:wbot.newScript)\n\n编写 .py 脚本，使用元素库插入网页自动化代码。\n[1. 选择 Python](command:wbot.selectPython)\n[2. 安装 wbot](command:wbot.installRuntime)\n[3. 启动浏览器服务](command:wbot.startBridge)\n[4. 准备浏览器扩展](command:wbot.browserExtension)\n[抓取元素](command:wbot.pick) · [使用指南](command:wbot.help)"}],
     "menus": {
       "view/title": [
+        {"command":"wbot.initProject","when":"view == wbot.elements","group":"0_project@1"},
+        {"command":"wbot.buildPackage","when":"view == wbot.elements","group":"0_project@2"},
         {"command":"wbot.newScript","when":"view == wbot.elements","group":"navigation@0"},
         {"command":"wbot.startBridge","when":"view == wbot.elements","group":"navigation@1"},
         {"command":"wbot.pick","when":"view == wbot.elements","group":"navigation@2"},
@@ -77,7 +81,7 @@
   },
   "scripts": {
     "prepare-runtime":"node scripts/prepare-runtime.js",
-    "test":"node --test test/core.test.js test/bridge.test.js test/code-only.test.js",
+    "test":"node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js",
     "package":"npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.4.0.vsix"
   },
   "devDependencies": {"@vscode/vsce":"^3.6.0"}

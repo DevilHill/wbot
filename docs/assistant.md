@@ -1,0 +1,299 @@
+# WBot Assistant Qt 桌面预览
+
+Assistant 使用 **PySide6 + Qt Widgets** 提供本机小窗口，包含自动化搜索、发布包导入、参数填写、运行记录、日志和 JSON 结果。Qt 界面与后台执行服务是独立进程：关闭窗口收起到系统托盘，已接受的任务继续运行；重新打开可查看原作业。系统没有可用托盘时，关闭窗口退出界面，后台服务仍继续运行。
+
+当前是支持本机与跨电脑执行的开发预览。Studio 负责开发和构建，Assistant 负责本机使用与执行；[OC 管理端](oc.md) 可审批设备绑定、管理包、部署流程，并向已批准的远程 Assistant 手动派发作业。组织账号、用户权限、定时调度和完整生产部署尚未实现。完整产品目标见 [需求架构](product-requirements.md)，本页仅说明当前代码可用的行为。
+
+## 环境与首次运行
+
+在仓库根目录执行以下 PowerShell 命令。当前固定的 Qt 依赖要求 Python 3.10–3.15，Windows 建议沿用项目的 Python 3.13 环境。Qt 界面依赖由 [requirements-assistant.txt](../requirements-assistant.txt) 安装；`wbot` wheel 只提供 Python 库，不包含 Assistant 应用，以下模块命令需要保留仓库源码。
+
+```powershell
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install .
+.\.venv\Scripts\python.exe -m pip install -r requirements-assistant.txt
+.\.venv\Scripts\python.exe -m app.automation_package build examples/assistant-demo
+.\.venv\Scripts\python.exe -m app.assistant open
+```
+
+首次构建生成 `examples/assistant-demo/dist/assistant-demo-0.1.0.wbot.zip`。重复构建不会覆盖这个文件；修改项目后应先提高 `wbot.json` 的版本，再构建新包。
+
+Qt 窗口打开后：
+
+1. 在“我的自动化”点击“导入”，通过系统文件选择器选择刚构建的 `.wbot.zip`。
+2. 选择 `assistant-demo`，点击“运行所选自动化”，填写 `name` 后点击“开始运行”。
+3. 在运行详情查看“执行日志”和“运行结果”；成功时得到问候日志和 `{"message": "你好，填写的名字"}` 结果。以后可从“运行记录”重新打开详情。
+
+服务默认监听 `127.0.0.1:8791`，只提供本机访问。若端口已被其他程序占用，可用 `--port 0` 自动分配，并以启动结果中的 URL 为准。
+
+需要浏览器诊断界面时，可显式使用：
+
+```powershell
+.\.venv\Scripts\python.exe -m app.assistant open --browser
+```
+
+Qt 界面不需要 pywebview、WebView2 或网页前端。未安装 Qt 依赖时，默认入口会提示安装依赖，不会自动切换浏览器。浏览器诊断页导入时填写发布包的本机完整路径；它使用同一个后台服务与历史记录。原有 `run.py` 仍启动 pywebview 编码桌面，和 Assistant 是不同入口。
+
+## 连接 OC 管理平台
+
+在主窗口点击齿轮图标“连接设置”，填写 **OC 服务地址** 和 **设备名称**，点击“保存并申请绑定”。服务地址应由 OC 管理员提供，使用独立的设备接入端口；不要填写浏览器管理页面的地址。
+
+| 默认地址 | 用途 |
+| --- | --- |
+| `127.0.0.1:8791` | Assistant 本机界面与执行服务通信 |
+| `127.0.0.1:8792` | 在 OC 电脑上打开管理页面，仅本机可访问 |
+| `127.0.0.1:8793` | OC 设备接入默认地址，仅适合同机测试；跨电脑时由管理员开放设备监听地址并提供可访问的 IP 或域名 |
+
+跨电脑使用 `https://OC域名:设备端口`，或明确接受明文传输的测试 HTTP 地址。不能将 `0.0.0.0`、`::` 或另一台电脑上的 `127.0.0.1` 当作连接目标。设备端口、HTTPS 证书和启动命令见 [OC 接入说明](oc.md)。
+
+申请提交后：
+
+1. “设备绑定”显示“等待管理员批准”、设备 ID 和六位确认码。
+2. 将设备名称、ID 和确认码提供给管理员，由其在 OC 的待审批列表中核对核验码，再批准申请。
+3. Assistant 自动更新为“已绑定”，后台持续发送心跳并领取分配给本机的任务。
+4. 管理员在 OC 上传发布包、部署到该设备并手动运行。Assistant 下载并校验包，在独立任务进程执行，再回报状态、日志和 JSON 结果。OC 的停止请求也会传递到实际任务进程。
+
+主窗口的“已连接”表示界面已连接本机执行服务；OC 的绑定与连接状态应在“连接设置”中查看。审批被拒绝或授权被撤销时，需要重新申请并由管理员再次批准，旧绑定不会自动恢复。本机手工导入与运行仍可用于开发试用；它不是组织授权流程目录。
+
+### 断开、切换后台与结果补报
+
+| 操作或状态 | 当前行为 |
+| --- | --- |
+| 关闭窗口或退出 Qt 界面 | 后台连接、已接受任务与结果同步继续 |
+| 点击“断开连接” | 暂停本机与 OC 的连接，不撤销 OC 中的设备授权；使用原地址和设备名称可重新连接 |
+| 本机仍有实际执行中的任务 | 不允许切换后台或断开，需先等待任务结束或明确停止任务 |
+| 任务已结束，但结果尚未回传 | 允许断开或切换后台，保留原身份与待回报记录；回到原 OC 地址和原设备名称后继续补报 |
+| 任务已领取但尚未启动时切换或断开 | 在本机取消该任务；重新连接原后台后回报“已停止”，不会为了补报而执行它 |
+| 管理员在 OC 撤销绑定 | 阻止新任务和包下载；已经运行的任务继续，并仍可回报状态、日志和结果 |
+
+切换到其他 OC 不会把旧任务结果发送给新后台，也不会同时维持多个后台连接。需要补报时，填写原 OC 地址与原设备名称，并保留 Assistant 数据目录。仍有效的原绑定会复用；已拒绝或撤销的绑定需要重新申请，旧任务按原身份记录向原后台补报。已记录的远程作业在连接服务重启或结果请求重试时不会重新执行。连接状态、任务执行结果和是否已经回报 OC 是不同信息，结果待同步不能当成任务仍在执行。
+
+设备身份由本机后台生成和持久保存，Qt 与浏览器只获得公开连接状态，不会收到设备密钥。该能力用于设备绑定，不提供组织账号登录、用户角色或授权流程目录。
+
+## Windows 便携版
+
+便携版面向 Windows x64。完整解压 `WBotAssistant-windows-x64.zip` 后，双击其中的 `WBotAssistant/WBotAssistant.exe` 即可打开 Qt 窗口。包内包含 Qt、独立 Python、wbot 和 lxml；运行基础示例不需要另装 Python 或 VS Code，也不需要原仓库目录。额外业务依赖仍需按包清单准备。
+
+请保留整个 `WBotAssistant` 目录，不要只复制 EXE：
+
+| 路径 | 用途 |
+| --- | --- |
+| `WBotAssistant.exe` | 桌面入口，无参数时打开 Qt 窗口 |
+| `_internal/` | Qt 界面及其打包依赖 |
+| `python/` | 后台服务与任务使用的独立 Python |
+| `runtime/` | 后台服务、wbot 和浏览器诊断页 |
+| `licenses/`、`checksums.sha256.json` | 第三方许可和构建时的文件校验摘要 |
+
+Qt 依赖随桌面入口分发，未安装到任务 Python 中。请用 EXE 打开窗口；管理后台服务时，在便携目录打开 PowerShell，可执行：
+
+```powershell
+.\python\python.exe -m app.assistant status
+.\python\python.exe -m app.assistant stop
+```
+
+默认数据仍保存在 `%USERPROFILE%\.wbot-assistant`，不在便携目录里。源码入口和便携入口如果使用相同数据目录，会连接已运行的同一个服务；切换任务 Python 环境需要先停止原服务，再用目标入口启动。`stop` 会终止当前任务，退出 Qt 界面则不会。
+
+如果旧版后台尚在运行，新版界面也会复用它；缺少连接设置接口的旧后台无法提供本次新增功能。可以等现有任务完成后停止旧后台，再启动新版。也可以在新版 `WBotAssistant` 目录打开 PowerShell，使用独立数据目录试用，保留旧版任务与数据：
+
+```powershell
+.\WBotAssistant.exe open --state-dir "$env:USERPROFILE\.wbot-assistant-preview" --port 0
+```
+
+独立试用目录不会自动导入旧版的自动化、记录和连接设置；以后需要继续这次试用时，使用相同命令。
+
+需要额外依赖时，开发者或运维人员在便携目录使用内置解释器安装包清单要求的版本。例如为清单中声明的 `openpyxl==3.1.5` 准备环境：
+
+```powershell
+.\python\python.exe -m ensurepip --default-pip
+.\python\python.exe -m pip install "openpyxl==3.1.5"
+```
+
+`ensurepip` 使用包内资源引导 pip；实际安装业务依赖需要可用的包源或事先准备的 wheel。不同自动化仍共用此任务环境，没有自动安装或依赖隔离。
+
+开发者完成前面的源码依赖安装后，可在仓库根目录构建便携版：
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install PyInstaller
+.\.venv\Scripts\python.exe build_assistant.py
+```
+
+产物为 `dist/WBotAssistant/` 和 `dist/WBotAssistant-windows-x64.zip`。构建脚本会检查内置 Python、真实后台任务、Qt 初始化和重复启动唤起；已有构建也可运行 `python build_assistant.py --verify-only`。这仍是便携预览，尚无安装向导、自动更新、开机启动或 Windows 服务注册，企业部署与升级验收仍未完成。
+
+## 服务命令与生命周期
+
+以下为源码方式的命令，均在仓库根目录执行；可将 `python` 换为你的虚拟环境解释器。执行服务使用**启动它的同一个 Python 环境**运行任务。
+
+| 命令 | 行为 |
+| --- | --- |
+| `python -m app.assistant start` | 启动后台服务和 HTTP 工作台，输出包含 URL 的 JSON；命令随即退出，不打开窗口 |
+| `python -m app.assistant open` | 启动或连接后台服务，打开 Qt 窗口；同一数据目录已有界面时唤起原窗口 |
+| `python -m app.assistant open --browser` | 使用系统浏览器打开诊断工作台，不启动 Qt 窗口 |
+| `python -m app.assistant serve` | 在当前终端前台运行服务；按 Ctrl+C 停止服务及正在执行的任务 |
+| `python -m app.assistant status` | 输出服务是否运行及其 URL、进程 ID |
+| `python -m app.assistant stop` | 停止后台服务；正在执行的任务也会被终止 |
+
+所有动作支持 `--state-dir PATH`，默认目录为 `~/.wbot-assistant`，Windows 对应 `%USERPROFILE%\.wbot-assistant`。`--port` 默认 `8791`，`0` 表示自动分配。连接已有数据目录的服务时会复用其地址；改变端口或 Python 环境需先停止再启动。
+
+为试用指定独立目录时，后续查询和停止应使用同一路径：
+
+```powershell
+python -m app.assistant start --state-dir .local/assistant-preview --port 0
+python -m app.assistant open --state-dir .local/assistant-preview
+python -m app.assistant status --state-dir .local/assistant-preview
+python -m app.assistant stop --state-dir .local/assistant-preview
+```
+
+“关闭窗口”“退出界面”“停止当前任务”和“停止后台服务”是不同动作：
+
+- 关闭 Qt 主窗口：有系统托盘时收起到托盘，可从托盘重新打开。
+- 退出 Qt 界面：结束界面进程，后台服务和已接受任务继续运行；再次执行 `open` 可恢复查看。
+- 在作业详情停止任务：只终止选中的任务及其子进程。
+- 执行 `stop`：停止后台服务及当前任务。
+
+同一数据目录只保留一个 Qt 界面实例；不同数据目录可连接各自的后台服务。当前没有 Windows 服务注册或开机启动，也不保证注销或关机后任务继续。服务异常退出后，重启会将未确认任务标记为“中断待核实”，不会自动从头重跑。
+
+## 项目清单与构建
+
+创建项目必须指定一个尚不存在的目录：
+
+```powershell
+python -m app.automation_package init automations/my-automation --name my-automation
+python -m app.automation_package build automations/my-automation
+python -m app.automation_package inspect automations/my-automation/dist/my-automation-0.1.0.wbot.zip
+```
+
+也可在 VS Code 执行 **WBot: 初始化自动化项目** 和 **WBot: 构建自动化发布包**。构建前会保存编辑内容，详情见 [VS Code 指南](../vscode-extension/README.md)。当前构建生成本地文件，不会上传到 OC。
+
+最小项目由 `wbot.json` 和 `main.py` 组成。初始化清单如下：
+
+```json
+{
+  "schemaVersion": 1,
+  "name": "my-automation",
+  "version": "0.1.0",
+  "entry": "main.py",
+  "files": ["main.py"],
+  "parameters": {
+    "name": {
+      "type": "string",
+      "default": "WBot",
+      "description": "问候对象"
+    }
+  },
+  "requirements": {}
+}
+```
+
+| 字段 | 当前规则 |
+| --- | --- |
+| `schemaVersion` | 必须是整数 `1` |
+| `name` | 1–80 位，英文字母或数字开头，只使用英文字母、数字、`_`、`-` |
+| `version` | 固定语义版本，如 `0.1.0`、`1.0.0`；不接受 `latest` |
+| `entry` | `files` 中声明的 `.py` 文件，使用项目内相对路径 |
+| `files` | 显式文件白名单，可包含 Python 模块和数据；未声明文件不打包，不支持通配符或目录条目 |
+| `parameters` | 参数名到声明的对象；无参数时为 `{}` |
+| `requirements` | 依赖包名到精确版本的对象，如 `{"openpyxl": "3.1.5"}`；无额外依赖时为 `{}` |
+| `elements` | 可选，`wbot-elements` JSON 的相对路径，且必须同时列入 `files` |
+
+清单不接受上述范围外的字段。相对路径统一使用 `/`，拒绝绝对路径、`..`、链接、保留设备名和大小写冲突。包内只包含清单、白名单文件及 `checksums.sha256.json` 完整性索引。
+
+默认输出为 `<项目>/dist/<name>-<version>.wbot.zip`。`build --output PATH` 可指定完整输出文件路径，但已有文件仍不会覆盖。Assistant 允许重复导入内容完全相同的同名版本；同名同版本内容不同则拒绝。更新业务代码时提高版本并重新构建，不要直接改动已安装目录。
+
+包上限为 1000 个文件、单文件 16 MiB、总解压大小 64 MiB、清单/校验元数据各 256 KiB。导入先验证文件集合和完整性再安装；哈希不验证发布者身份，应导入自己信任的来源提供的包。
+
+## 参数与运行结果
+
+参数支持 `string`、`number`、`integer`、`boolean`，可声明 `required`、`default`、`description`。参数名使用英文字母或下划线开头，后续为字母、数字或下划线，最多 80 位。
+
+本次输入覆盖默认值；未输入且有默认值时使用默认值；缺少必填参数时拒绝运行；既无默认值又非必填的参数可省略。未知参数会被拒绝，类型不会自动转换，例如字符串 `"true"` 不能代替布尔 `true`。当前没有枚举、文件上传、密码控件或声明式输出 schema。
+
+包中的 Python 入口通过 `wbot.runtime` 使用运行上下文：
+
+```python
+from wbot import runtime
+
+parameters = runtime.parameters()
+message = f"你好，{parameters['name']}"
+print(f"作业 {runtime.job_id()}：{message}")
+runtime.set_result({"message": message})
+```
+
+| API | 行为 |
+| --- | --- |
+| `runtime.parameters()` | 返回已经校验并合并默认值的参数字典 |
+| `runtime.job_id()` | 返回本次作业 ID，用于关联日志和记录 |
+| `runtime.set_result(result)` | 保存 JSON 对象结果；再次调用会替换本次结果，不会追加 |
+
+结果必须是可序列化的 JSON 对象，最大 1 MiB，不接受 NaN/Infinity。脚本正常退出后界面显示该结果；没有设置结果也可正常完成，界面显示“尚无返回结果”。异常和强制终止不作为成功结果展示。
+
+这些 API 需要 Assistant 执行上下文。直接 `python main.py` 或用现有 VS Code“运行当前 Python 脚本”执行初始化示例，会提示没有运行上下文；当前应通过构建、导入、运行来验证它。普通 `.py` 脚本的原有 VS Code 运行与 debugpy 调试继续可用，自动注入包运行上下文的调试入口尚未提供。
+
+## 依赖、工作目录与元素资产
+
+源码启动的执行服务使用对应 Python 环境，便携版新启动的服务使用包内 `python/` 环境；两者都按 `requirements` 检查已安装版本是否完全相符。它**不会自动安装依赖，也不会为不同包创建独立虚拟环境**。应由开发者先在实际运行服务的环境安装所需版本；依赖缺失或版本不同会在业务脚本开始前失败。
+
+每次作业将已安装包复制到自己的工作目录，避免业务脚本修改发布版本。相对输出路径落在该作业的 `work` 目录。工作目录隔离不限制 Python 对本机其他文件、网络或进程的访问，不是安全沙箱。
+
+需要元素资产时，从元素库导出 `wbot-elements` JSON，将文件加入 `files`，并设置例如 `"elements": "assets/elements.json"`。构建副本会移除临时的浏览器、标签页、框架及文档 ID，原始项目文件不变。每次运行导入独立 SQLite 元素库，脚本使用：
+
+```python
+from wbot import selector
+
+elements = selector.SelectorStore()
+search = elements.get("搜索框", group="首页")
+```
+
+避免在发布脚本中写作者机器上的元素库绝对路径；该路径会覆盖运行服务提供的项目库位置。元素资产包含定位规则，不包含可跨次恢复的浏览器登录和 iframe 链。
+
+Assistant 目前不自动启动或管理浏览器桥。`web.get()` 仍需要有效的本机桥、浏览器扩展及最近一次抓取；关闭 VS Code 会关闭其自建桥，因此不能把该模式直接承诺为脱离编辑器的无人值守运行。需要独立浏览器时使用 `web.create()`，另行准备 Playwright、浏览器及业务登录条件，具体限制见 [wbot 文档](wbot.md)。
+
+## 运行、停止与本地记录
+
+同一服务一次只接受一个任务；忙时拒绝新的运行请求，不进入等待队列。界面通过请求 ID 避免同次提交重试重复执行；有意再次运行会创建新作业。
+
+“运行记录”显示总作业数，列表最多加载 200 条摘要，优先显示活动任务，其余按创建时间倒序。搜索只筛选当前加载的记录；更早的历史仍保留，当前没有翻页入口。打开单条详情后才读取完整输入参数和结果，历史列表不会同时加载每份大结果。
+
+状态包括准备环境、运行中、停止中、已完成、失败、已停止和中断待核实。停止当前任务会强制终止该任务拥有的进程及子进程，不支持任意 Python 代码暂停/恢复或业务回滚。停止时可能已经完成部分外部写入，重新执行前需核实结果。`stop` 服务命令也会终止正在运行的任务。
+
+默认数据目录包含：
+
+| 路径 | 内容 |
+| --- | --- |
+| `assistant.sqlite3` | 已安装包记录和作业历史 |
+| `connection.sqlite3` | OC 连接身份档案及远程作业回报记录，包含本机绑定身份，备份时按凭据管理 |
+| `packages/<name>@<version>/` | 通过校验的安装内容 |
+| `jobs/<job-id>/work/` | 本次运行的工作副本及脚本写入的相对路径文件 |
+| `jobs/<job-id>/output.log` | 标准输出与错误输出，最多 4 MiB，截断会标记 |
+| `jobs/<job-id>/result.json` | 脚本通过 runtime 写入的结构化结果 |
+| `service.log` | 后台服务启动和处理错误日志 |
+
+Qt 详情最多显示最近 20000 行日志；本机 `output.log` 仍受 4 MiB 上限约束。远程回报最多携带 512 KiB 日志尾部，超出时带截断说明；这不改变本机日志上限。当前不提供产物下载、自动日志保留期限、包卸载或磁盘配额管理。历史和本地文件会保留；OC 可以主动读取本机接入的记录，或接收远程 Assistant 上报。输入参数和脚本日志可能包含业务数据，不应把凭据直接当普通参数传入或打印。
+
+## 验证与常见问题
+
+在仓库根目录执行相关测试：
+
+```powershell
+python -m unittest discover -s tests -p "test_automation_package.py" -v
+python -m unittest discover -s tests -p "test_assistant*.py" -v
+```
+
+| 现象 | 处理方法 |
+| --- | --- |
+| `No module named app` | 回到仓库根目录；单独安装 wbot wheel 不包含 Assistant |
+| 提示缺少 PySide6 | 使用运行 Assistant 的同一个 Python 安装 `requirements-assistant.txt`；或显式使用 `open --browser` 诊断后台服务 |
+| 便携版提示运行资源不完整 | 重新完整解压便携目录，保留 EXE 旁的 `_internal/`、`python/` 和 `runtime/` |
+| 点击关闭后仍有托盘图标 | 关闭窗口只收起界面；用托盘退出界面，停止服务则使用 `stop` |
+| 重复启动没有出现第二个窗口 | 同一数据目录会唤起原窗口，避免重复托盘实例 |
+| 主窗口已连接，但 OC 显示离线 | 主窗口指本机服务；打开“连接设置”检查 OC 地址、绑定审批与错误提示 |
+| 一直等待管理员批准 | 将设备 ID 和确认码提供给管理员，在 OC 的待审批列表核对后批准 |
+| OC 地址提示服务不兼容 | 检查是否误填了管理端口 8792；应使用管理员提供的设备接入地址，默认端口为 8793 |
+| 结果待同步但需要切换后台 | 任务已经结束时可以切换；保留数据目录，之后使用原地址与原设备名称恢复连接并补报 |
+| 构建提示目标已存在 | 保留已有版本，增加清单版本后重新构建 |
+| 导入提示同名同版本内容不同 | 不覆盖已发布版本，使用新的版本号 |
+| 任务提示依赖缺失/不符 | 在启动服务的 Python 环境安装声明的精确版本，再运行 |
+| 服务启动失败 | 查看所选数据目录下 `service.log`；检查端口或用 `--port 0` |
+| 任务成功但没有结果 | 确认脚本调用 `runtime.set_result()`；`print()` 只进入日志 |
+| 服务重启后显示中断待核实 | 先核实业务系统结果，再决定是否作为新作业重跑 |
+
+当前未实现 Assistant 组织登录及授权目录同步、定时调度、业务凭据托管、开机服务、自动环境准备或完整无人值守桌面能力。远程设备绑定、手动派发与结果回报已经提供；Qt 的“我的自动化”仍展示本机已安装包，OC 的流程名称、用户授权与部署目录尚未同步成 Assistant 的业务目录。其余能力按产品需求继续建设，不计为开发预览已经交付。

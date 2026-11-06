@@ -12,6 +12,7 @@ import sys
 import tempfile
 import threading
 import time
+from .processes import windows_job
 
 SKIP = {'.git', '.venv', 'venv', '__pycache__', 'node_modules', 'build', 'dist', '.workbuddy-ai'}
 TEXT = {'.py', '.txt', '.md', '.json', '.toml', '.ini', '.yaml', '.yml', '.csv', '.xml', '.html', '.css', '.js', '.gitignore'}
@@ -23,33 +24,6 @@ print("WBot Studio 编码版已就绪")
 # 点击顶部「抓取元素」，确认后用「插入代码」添加定位器。
 # 也可从左侧元素库插入已保存元素。
 '''
-
-
-def windows_job(proc):
-    """只管理本次创建的进程及其后代；关闭句柄自动回收。"""
-    import ctypes as C
-    from ctypes import wintypes as W
-    class Basic(C.Structure):
-        _fields_ = [('time1', C.c_longlong), ('time2', C.c_longlong), ('flags', W.DWORD),
-                    ('min', C.c_size_t), ('max', C.c_size_t), ('active', W.DWORD),
-                    ('affinity', C.c_size_t), ('priority', W.DWORD), ('scheduling', W.DWORD)]
-    class Limits(C.Structure):
-        _fields_ = [('basic', Basic), ('io', C.c_ulonglong * 6), ('memory', C.c_size_t * 4)]
-    kernel = C.WinDLL('kernel32', use_last_error=True)
-    kernel.CreateJobObjectW.argtypes = [C.c_void_p, W.LPCWSTR]
-    kernel.CreateJobObjectW.restype = W.HANDLE
-    kernel.SetInformationJobObject.argtypes = [W.HANDLE, C.c_int, C.c_void_p, W.DWORD]
-    kernel.AssignProcessToJobObject.argtypes = [W.HANDLE, W.HANDLE]
-    kernel.CloseHandle.argtypes = [W.HANDLE]
-    handle = kernel.CreateJobObjectW(None, None)
-    limits = Limits(); limits.basic.flags = 0x2000  # KILL_ON_JOB_CLOSE
-    if not handle or not kernel.SetInformationJobObject(handle, 9, C.byref(limits), C.sizeof(limits)):
-        if handle: kernel.CloseHandle(handle)
-        raise OSError(C.get_last_error(), '无法创建脚本进程组')
-    if not kernel.AssignProcessToJobObject(handle, W.HANDLE(int(proc._handle))):
-        kernel.CloseHandle(handle)
-        raise OSError(C.get_last_error(), '无法管理脚本进程组')
-    return lambda: kernel.CloseHandle(handle)
 
 
 class Studio:

@@ -4,6 +4,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const core = require('./src/core');
 const {BridgeManager} = require('./src/bridge');
+const {createProjectCommands} = require('./src/project');
 
 let manager;
 function activate(context) {
@@ -192,6 +193,7 @@ function activate(context) {
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
   }
   const handlers = {
+    ...createProjectCommands({vscode, runtime, output, pythonExecutable}),
     startBridge:start, stopBridge:async () => { const stopped = await manager.stop(); await refresh(true);
       vscode.window.showInformationMessage(stopped ? '已停止本扩展启动的服务' : '没有本扩展启动的服务；外部服务保持运行'); },
     refresh:() => refresh(), pick, saveLastPick, addElement:() => editRecord(),

@@ -7,11 +7,14 @@ import ssl
 from urllib.parse import urlsplit
 
 from .agent_service import AgentDenied
+from .element_routes import developer_elements
+from .store import public_record
 from .server import _reject_constant, _unique_object
 
 
 MAX_REPORT_BYTES = 6 * 1024 * 1024
 MAX_CONTROL_BYTES = 8192
+MAX_ELEMENT_BYTES = 2 * 1024 * 1024
 
 
 class AgentServer(ThreadingHTTPServer):
@@ -128,7 +131,9 @@ class AgentHandler(BaseHTTPRequestHandler):
             job_route = (len(parts) == 5 and parts[:3] == ['api', 'agent', 'jobs']
                          and ((method == 'GET' and parts[4] == 'package')
                               or (method == 'POST' and parts[4] == 'report')))
-            if not job_route and (method, path) not in {
+            element_route = path.startswith('/api/agent/elements/')
+            update_route = path.startswith('/api/agent/assistant-updates/')
+            if not job_route and not element_route and not update_route and (method, path) not in {
                     ('GET', '/api/agent/status'), ('POST', '/api/agent/poll')}:
                 self._json(404, {'error': '设备接口不存在'})
                 return
@@ -137,7 +142,15 @@ class AgentHandler(BaseHTTPRequestHandler):
                 raise AgentDenied('设备身份或凭据无效')
             agents = self.server.service.agents
             device = agents.authenticate(self.headers['X-WBot-Device'], self.headers['X-WBot-Device-Token'])
-            if path == '/api/agent/status':
+            if update_route:
+                self._assistant_update(method, parts, device)
+            elif element_route:
+                body = self._read_json(MAX_ELEMENT_BYTES) if method == 'POST' else None
+                with self.server.service._lock:
+                    device = agents.authenticate(self.headers['X-WBot-Device'], self.headers['X-WBot-Device-Token'])
+                    agents.require_approved(device)
+                    self._json(*developer_elements(self.server.service.elements, device, method, path, body))
+            elif path == '/api/agent/status':
                 self._json(200, agents.status(device))
             elif path == '/api/agent/poll':
                 self._json(200, agents.poll(device, self._read_json(MAX_CONTROL_BYTES)))
@@ -151,7 +164,7 @@ class AgentHandler(BaseHTTPRequestHandler):
                         self.wfile.write(chunk)
         except (BrokenPipeError, ConnectionResetError):
             return
-        except AgentDenied as exc:
+        except PermissionError as exc:
             self._json(403, {'error': str(exc)})
         except (KeyError, FileNotFoundError):
             self._json(404, {'error': '找不到该设备的任务或发布包'})
@@ -164,6 +177,28 @@ class AgentHandler(BaseHTTPRequestHandler):
         except Exception:
             logging.exception('Agent 请求处理失败')
             self._json(500, {'error': '设备通信服务发生错误'})
+
+    def _assistant_update(self, method, parts, device):
+        service = self.server.service
+        with service._lock:
+            device = service.agents.authenticate(self.headers['X-WBot-Device'], self.headers['X-WBot-Device-Token'])
+            service.agents.require_approved(device)
+            if len(parts) == 4 and parts[3] == 'latest' and method == 'POST':
+                body = self._read_json(MAX_CONTROL_BYTES)
+                self._json(200, {'release': service.releases.latest(device, body.get('version'))})
+                return
+            if method != 'GET' or len(parts) not in (4, 5) or (len(parts) == 5 and parts[4] != 'archive'):
+                self._json(404, {'error': '更新接口不存在'})
+                return
+            release = service.releases.for_device(device, parts[3])
+            if len(parts) == 4:
+                self._json(200, {'release': public_record(release)})
+                return
+            stream = open(release['_archive'], 'rb')
+        with stream:
+            self._headers(200, release['size'], 'application/zip')
+            while chunk := stream.read(1024 * 1024):
+                self.wfile.write(chunk)
 
 
 def create_agent_server(service, host='127.0.0.1', port=8793, certfile=None, keyfile=None):

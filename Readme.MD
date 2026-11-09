@@ -9,7 +9,7 @@ WBot 提供 Python 自动化开发、管理与执行工具。Studio 以 VS Code 
 - 打包 EXE 内置 Python 与 wbot 基础运行环境；编辑器资源离线使用。
 - 保留元素库、抓取元素与 iframe 内的 XPath 校验。
 
-[编码界面](docs/images/studio-code.png) · [VS Code 插件](vscode-extension/README.md) · [OC 管理端](docs/oc.md) · [Assistant 桌面与 OC 连接](docs/assistant.md) · [产品需求架构](docs/product-requirements.md) · [wbot API](docs/wbot.md) · [浏览器扩展](extension/README.md)
+[编码界面](docs/images/studio-code.png) · [VS Code 插件](vscode-extension/README.md) · [OC 管理端](docs/oc.md) · [共享元素与合并](docs/shared-elements.md) · [Assistant 桌面与 OC 连接](docs/assistant.md) · [产品需求架构](docs/product-requirements.md) · [wbot API](docs/wbot.md) · [浏览器扩展](extension/README.md)
 
 ## 获取代码
 
@@ -75,6 +75,8 @@ VS Code 新增 **WBot: 初始化自动化项目** 和 **WBot: 构建自动化发
 
 ## OC React 管理端
 
+共享 XPath 元素现支持受保护的主分支、个人分支、版本记录与合并申请。VS Code 插件 0.5.0 可从当前元素库查看差异、提交并发起申请；OC 管理员可处理冲突、合并、关闭申请或恢复历史快照。通信复用已批准的 Assistant 设备连接，现阶段作者按设备记录。操作步骤和本地修改保护规则见 [共享元素指南](docs/shared-elements.md)。
+
 完成 Python 虚拟环境与 wbot 安装后，构建管理页面并启动 OC：
 
 ```powershell
@@ -101,7 +103,7 @@ OC 使用 React + TypeScript + Vite、Python 标准库 HTTP 服务和 SQLite。A
 
 以上 EXE 构建命令对应原有编码桌面，产物为 `dist/1.5.0/XPathStudio.exe`；修改界面后需重新打包。
 
-Assistant 使用独立的 [build_assistant.py](build_assistant.py)。安装 `requirements-assistant.txt`、wbot 与 PyInstaller 后运行 `python build_assistant.py`，生成 `dist/WBotAssistant/WBotAssistant.exe` 及包含完整目录的 `dist/WBotAssistant-windows-x64.zip`。这是带独立任务 Python 的便携预览，尚无安装向导、自动更新或开机启动。构建时会验证内置运行环境与 Qt 启动链路，详细命令见 [Assistant 指南](docs/assistant.md)。
+Assistant 使用独立的 [build_assistant.py](build_assistant.py)。安装 `requirements-assistant.txt`、wbot 与 PyInstaller 后运行 `python build_assistant.py`，生成 `dist/WBotAssistant/WBotAssistant.exe` 及包含完整目录的 `dist/WBotAssistant-windows-x64.zip`。这是带独立任务 Python 的便携预览；0.7.0 起支持 OC 发布版本、用户确认的在线更新与启动失败回退，尚无安装向导或开机启动。构建时会验证内置运行环境与 Qt 启动链路，首次安装与更新条件见 [Assistant 指南](docs/assistant.md#oc-在线更新)。
 
 浏览器扩展可用 `tools/pack_extension.py` 打包，VS Code 扩展构建见其指南。
 

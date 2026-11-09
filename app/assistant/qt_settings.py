@@ -2,12 +2,15 @@
 import ipaddress
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtWidgets import (QDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
+from PySide6.QtCore import Qt, QTimer, Signal, QSize
+from PySide6.QtWidgets import (QApplication, QCheckBox, QFrame, QHBoxLayout, QLineEdit,
                                QPushButton, QScrollArea, QVBoxLayout, QWidget)
 
-from .qt_dialogs import label
-from .qt_theme import display_time, make_symbol_icon
+from .qt_client import SETTINGS_UNSUPPORTED
+from .qt_dialogs import label, ThemedComboBox
+from .qt_theme import display_time, make_symbol_icon, theme_mode, set_theme_mode
+from .qt_theme import reduced_motion, set_reduced_motion
+from .qt_updates import UpdateCard
 
 
 BINDING_LABELS = {'unconfigured': '尚未连接', 'connecting': '正在提交申请',
@@ -26,7 +29,9 @@ BINDING_HINTS = {
 }
 
 
-class SettingsDialog(QDialog):
+class SettingsPage(QWidget):
+    restart_requested = Signal()
+    back_requested = Signal()
     binding_changed = Signal(str)
 
     def __init__(self, client, state_dir, parent=None):
@@ -43,16 +48,12 @@ class SettingsDialog(QDialog):
         self._syncing_fields = False
         self._action_error = ''
         self._poll_error = ''
-        self.setWindowTitle('连接设置 · WBot Assistant')
-        self.resize(520, 700)
-        self.setMinimumSize(440, 560)
+        self.setObjectName('settingsPage')
         self._build()
         self._render_settings()
         self.timer = QTimer(self)
         self.timer.setInterval(2000)
         self.timer.timeout.connect(self.refresh)
-        self.timer.start()
-        QTimer.singleShot(0, self.refresh)
 
     def _build(self):
         layout = QVBoxLayout(self)
@@ -60,49 +61,79 @@ class SettingsDialog(QDialog):
         layout.setSpacing(18)
         header = QHBoxLayout()
         header.setSpacing(14)
-        icon = QLabel()
-        icon.setPixmap(make_symbol_icon('settings').pixmap(48, 48))
-        icon.setFixedSize(48, 48)
-        header.addWidget(icon)
-        title = QVBoxLayout()
-        title.setSpacing(5)
-        title.addWidget(label('连接管理平台', 'dialogTitle'))
-        title.addWidget(label('让企业 OC 管理这台设备的连接与授权。', 'subtitle', True))
-        header.addLayout(title, 1)
+        self.back_button = QPushButton('返回')
+        self.back_button.setObjectName('secondary')
+        self.back_button.setAccessibleName('返回自动化首页')
+        self.back_button.setToolTip('返回首页（Esc）；保留尚未提交的草稿')
+        self.back_button.setIcon(make_symbol_icon('back', '#007AFF', 'transparent'))
+        self.back_button.setIconSize(QSize(18, 18))
+        self.back_button.clicked.connect(self.back_requested.emit)
+        header.addWidget(self.back_button)
+        header.addStretch()
+        header.addWidget(label('设置', 'dialogTitle'))
         layout.addLayout(header)
+        layout.addWidget(label('外观与管理平台连接', 'subtitle'))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
         sections = QVBoxLayout(content)
         sections.setContentsMargins(0, 0, 4, 0)
         sections.setSpacing(14)
+        sections.addWidget(self._appearance_fields())
         sections.addWidget(self._connection_fields())
         self.transport_hint = label('当前地址使用 HTTP。跨电脑连接建议使用 HTTPS，保护传输中的数据。',
                                     'transportHint', True)
         self.transport_hint.hide()
         sections.addWidget(self.transport_hint)
         sections.addWidget(self._binding_card())
+        self.update_card = UpdateCard(self.client)
+        self.update_card.restart_requested.connect(self.restart_requested.emit)
+        sections.addWidget(self.update_card)
         self.error = label('', 'message', True)
         self.error.setProperty('error', True)
         self.error.hide()
         sections.addStretch()
         scroll.setWidget(content)
         layout.addWidget(scroll, 1)
-        layout.addWidget(self.error)
-        layout.addWidget(label('断开后可重新连接；设备授权由 OC 管理员管理。', 'hint', True))
+        sections.insertWidget(0, self.error)
+        self.footer_hint = label('', 'hint', True)
+        layout.addWidget(self.footer_hint)
         buttons = QHBoxLayout()
         buttons.setSpacing(12)
         self.disconnect_button = QPushButton('断开连接')
         self.disconnect_button.setObjectName('danger')
         self.disconnect_button.setFixedHeight(48)
+        self.disconnect_button.setMaximumWidth(140)
         self.disconnect_button.clicked.connect(self.disconnect_service)
-        buttons.addWidget(self.disconnect_button)
+        buttons.addWidget(self.disconnect_button, 0, Qt.AlignmentFlag.AlignLeft)
         self.connect_button = QPushButton('保存并申请绑定')
         self.connect_button.setObjectName('primary')
         self.connect_button.setFixedHeight(48)
         self.connect_button.clicked.connect(self.connect_service)
         buttons.addWidget(self.connect_button, 1)
         layout.addLayout(buttons)
+
+    def _appearance_fields(self):
+        card = QFrame()
+        card.setObjectName('settingsCard')
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(18, 14, 18, 14)
+        row = QHBoxLayout()
+        row.addWidget(label('外观', 'fieldLabel'))
+        self.theme_selector = ThemedComboBox()
+        self.theme_selector.setAccessibleName('界面外观')
+        for title, mode in (('跟随系统', 'system'), ('浅色', 'light'), ('深色', 'dark'), ('高对比度', 'contrast')):
+            self.theme_selector.addItem(title, mode)
+        self.theme_selector.setCurrentIndex(self.theme_selector.findData(theme_mode(QApplication.instance())))
+        self.theme_selector.currentIndexChanged.connect(lambda _: set_theme_mode(QApplication.instance(), self.theme_selector.currentData()))
+        row.addWidget(self.theme_selector, 1)
+        layout.addLayout(row)
+        self.reduce_motion = QCheckBox('减少动态效果')
+        self.reduce_motion.setToolTip('开启后，页面和选中块直接切换，不播放动画。')
+        self.reduce_motion.setChecked(reduced_motion(QApplication.instance()))
+        self.reduce_motion.toggled.connect(lambda enabled: set_reduced_motion(QApplication.instance(), enabled))
+        layout.addWidget(self.reduce_motion)
+        return card
 
     def _connection_fields(self):
         card = QFrame()
@@ -146,6 +177,9 @@ class SettingsDialog(QDialog):
         self.verification_code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.verification_code.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.verification_code)
+        self.copy_code = QPushButton('复制确认码')
+        self.copy_code.clicked.connect(lambda: QApplication.clipboard().setText(str(self.settings.get('verification_code') or '')))
+        layout.addWidget(self.copy_code)
         self.connection_details = label('', 'hint', True)
         self.connection_details.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         layout.addWidget(self.connection_details)
@@ -191,10 +225,15 @@ class SettingsDialog(QDialog):
     def _update_enabled(self):
         state = self.settings.get('binding_state', 'unconfigured')
         changed = self._draft_differs()
+        self.footer_hint.setText('连接修改尚未提交；返回首页会保留草稿。' if changed else
+                                 '断开后可重新连接；设备授权由 OC 管理员管理。')
         retryable = state not in ('connecting', 'pending', 'approved')
         complete = bool(self.server_url.text().strip() and self.device_name.text().strip())
+        show_apply = self.busy or changed or state not in ('approved', 'pending')
+        self.connect_button.setVisible(show_apply)
         self.connect_button.setEnabled(self.online and not self.busy and complete and (changed or retryable))
         configured = bool(self.settings.get('server_url')) and state not in ('unconfigured', 'disconnected')
+        self.disconnect_button.setVisible(configured)
         self.disconnect_button.setEnabled(self.online and not self.busy and configured)
         self.server_url.setEnabled(not self.busy)
         self.device_name.setEnabled(not self.busy)
@@ -218,7 +257,8 @@ class SettingsDialog(QDialog):
         self.binding_hint.setText(BINDING_HINTS.get(state, '连接状态会自动更新。'))
         code = self.settings.get('verification_code') or ''
         self.verification_code.setText('确认码  ' + str(code))
-        self.verification_code.setVisible(bool(code))
+        self.verification_code.setVisible(bool(code) and state == 'pending')
+        self.copy_code.setVisible(bool(code) and state == 'pending')
         address = self.settings.get('server_url') or ''
         details = (f'当前地址  {address}\n设备名称  {self.settings.get("device_name") or "—"}\n'
                    f'设备标识  {self.settings.get("device_id") or "—"}\n'
@@ -267,7 +307,7 @@ class SettingsDialog(QDialog):
         if revision != self._revision:
             return
         self.online = False
-        self._poll_error = message + '；正在重试，保留上次连接状态。'
+        self._poll_error = message if message == SETTINGS_UNSUPPORTED else message + '；正在重试，保留上次连接状态。'
         self._render_settings()
 
     def connect_service(self):
@@ -306,7 +346,18 @@ class SettingsDialog(QDialog):
         self._action_error = message
         self._render_settings()
 
-    def done(self, result):
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not self.closed:
+            self.timer.start()
+            self.refresh()
+
+    def hideEvent(self, event):
+        self.timer.stop()
+        super().hideEvent(event)
+
+    def closeEvent(self, event):
         self.closed = True
         self.timer.stop()
-        super().done(result)
+        self.update_card.close()
+        super().closeEvent(event)

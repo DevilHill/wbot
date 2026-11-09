@@ -41,4 +41,4 @@ export type Snapshot = {
 };
 export type Session = { token: string; mode: string; organization: string; default_assistant_dir: string; agent_gateway?: AgentGateway | null };
 export type JobLog = { log: string; cached: boolean; sync_error: string };
-export type Section = 'overview' | 'processes' | 'packages' | 'devices' | 'jobs';
+export type Section = 'overview' | 'processes' | 'packages' | 'elements' | 'devices' | 'jobs' | 'updates';

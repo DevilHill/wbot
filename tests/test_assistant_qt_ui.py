@@ -12,7 +12,7 @@ if HAS_QT:
     from PySide6.QtWidgets import QApplication, QTabWidget
     from app.assistant.qt_dialogs import ParameterDialog, JobDialog
     from app.assistant.qt_ui import AssistantWindow
-    from app.assistant.qt_settings import SettingsDialog
+    from app.assistant.qt_settings import SettingsPage
 
 
 PACKAGE = {'id': 'demo@1.0.0', 'manifest': {'schemaVersion': 1, 'name': 'demo', 'version': '1.0.0',
@@ -50,6 +50,7 @@ class FakeClient:
             QTimer.singleShot(0, lambda: on_error('后台服务未连接'))
             return None
         responses = {'/api/packages': {'items': self.packages},
+                     '/api/updates': {'update': {'status': 'idle', 'version': '0.7.0', 'install_supported': False}},
                      '/api/settings': {'settings': {'server_url': '', 'device_name': '',
                                                    'binding_state': 'unconfigured'}},
                      '/api/jobs/summary': {'items': self.jobs, 'total': self.job_total or len(self.jobs)},
@@ -184,7 +185,7 @@ class AssistantQtUiTests(unittest.TestCase):
         self.assertTrue(window.isVisible())
         self.assertFalse(any(path.endswith('/stop') for _, path, _ in self.client.calls))
 
-    def test_settings_button_reuses_one_dialog_and_updates_tooltip(self):
+    def test_settings_button_reuses_one_page_and_updates_tooltip(self):
         window = AssistantWindow(self.client, 'test-state')
         self.widgets.append(window)
         window.show()
@@ -192,8 +193,10 @@ class AssistantQtUiTests(unittest.TestCase):
         QTest.mouseClick(window.settings_button, Qt.MouseButton.LeftButton)
         window.open_settings()
         QTest.qWait(20)
-        dialogs = [dialog for dialog in window._dialogs if isinstance(dialog, SettingsDialog)]
-        self.assertEqual(len(dialogs), 1)
+        self.assertIsInstance(window.settings_page, SettingsPage)
+        self.assertFalse(window.settings_page.isWindow())
+        self.assertEqual(window.pages.count(), 2)
+        self.assertEqual(window._dialogs, [])
         self.assertIn('OC：尚未连接', window.settings_button.toolTip())
 
     def test_job_stop_targets_only_selected_job(self):

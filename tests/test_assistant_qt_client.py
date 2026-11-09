@@ -36,6 +36,8 @@ class LocalHandler(BaseHTTPRequestHandler):
             status, content = 200, b'{"items":[{"id":"hello@1.0.0"}]}'
         if self.path == '/api/invalid':
             content = b'not json'
+        if self.path == '/api/settings':
+            status, content = 404, b'{"error":"page not found"}'
         self.send_response(status)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(content)))
@@ -123,6 +125,13 @@ class QtClientTests(unittest.TestCase):
         kind, message = self.request('/api/packages')
         self.assertEqual(kind, 'error')
         self.assertIn('expired', message)
+
+    def test_older_backend_settings_404_explains_restart_without_stopping_jobs(self):
+        kind, message = self.request('/api/settings')
+        self.assertEqual(kind, 'error')
+        self.assertIn('不支持连接设置', message)
+        self.assertIn('完成正在运行的任务', message)
+        self.assertEqual(self.server.received, [('/api/settings', 'local-secret')])
 
     def test_remote_metadata_and_absolute_endpoints_are_rejected(self):
         self.assertEqual(self.request('https://example.com/api/packages')[0], 'error')

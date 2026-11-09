@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 
-TABLES = {'packages', 'devices', 'processes', 'jobs'}
+TABLES = {'packages', 'devices', 'processes', 'jobs', 'assistant_releases'}
 
 
 def public_record(record):
@@ -15,7 +15,7 @@ class OcStore:
     def __init__(self, path):
         self.path = path
         with self.connection() as database:
-            for table in ('packages', 'devices', 'processes'):
+            for table in ('packages', 'devices', 'processes', 'assistant_releases'):
                 database.execute(f'CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
             database.execute('''CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, payload TEXT NOT NULL)''')

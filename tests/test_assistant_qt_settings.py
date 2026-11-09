@@ -9,7 +9,7 @@ if HAS_QT:
     from PySide6.QtCore import Qt, QTimer
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication
-    from app.assistant.qt_settings import SettingsDialog
+    from app.assistant.qt_settings import SettingsPage
 
 
 SETTINGS = {'server_url': 'https://oc.example.test', 'device_name': '财务电脑',
@@ -29,6 +29,9 @@ class SettingsClient:
 
     def request(self, method, path, body=None, on_success=None, on_error=None):
         self.calls.append((method, path, body))
+        if path == '/api/updates':
+            QTimer.singleShot(0, lambda: on_success({'update': {'status': 'idle', 'install_supported': False}}))
+            return
         if method == 'POST':
             self.pending_action = (on_success, on_error)
         elif self.defer_poll:
@@ -40,7 +43,7 @@ class SettingsClient:
 
 
 @unittest.skipUnless(HAS_QT, '未安装可选 PySide6-Essentials')
-class SettingsDialogTests(unittest.TestCase):
+class SettingsPageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
@@ -48,7 +51,7 @@ class SettingsDialogTests(unittest.TestCase):
 
     def setUp(self):
         self.client = SettingsClient()
-        self.dialog = SettingsDialog(self.client, 'test-state')
+        self.dialog = SettingsPage(self.client, 'test-state')
         self.dialog.show()
         QTest.qWait(20)
 

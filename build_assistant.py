@@ -63,6 +63,7 @@ def copy_licenses(bundle):
     shutil.copy2(Path(sys.base_prefix) / 'LICENSE.txt', licenses / 'Python-LICENSE.txt')
     shutil.copy2(ROOT / 'LICENSE', licenses / 'WBot-LICENSE.txt')
     copy_tree(ROOT / 'licenses' / 'qt', licenses / 'Qt')
+    copy_tree(ROOT / 'licenses' / 'pyside6-fluent-ui', licenses / 'pyside6-fluent-ui')
     for name in ('PySide6-Essentials', 'shiboken6', 'lxml', 'PyInstaller'):
         distribution = importlib.metadata.distribution(name)
         for entry in distribution.files or []:
@@ -100,7 +101,7 @@ def copy_runtime(bundle):
     app = source_root / 'app'
     assistant = app / 'assistant'
     assistant.mkdir(parents=True)
-    for name in ('__init__.py', 'automation_package.py', 'processes.py'):
+    for name in ('__init__.py', 'automation_package.py', 'assistant_release.py', 'processes.py'):
         shutil.copy2(ROOT / 'app' / name, app / name)
     for source in (ROOT / 'app' / 'assistant').glob('*.py'):
         if not source.name.startswith('qt_'):
@@ -157,10 +158,15 @@ def verify_runtime(bundle):
     interpreter = bundle / 'python' / 'python.exe'
     source_root = bundle / 'runtime'
     probe = '''import importlib.metadata as m, json, pathlib, site, ssl, sqlite3, sys, lxml, wbot
+from wbot import element_versions
+from wbot.elements import normalize_element
 root = pathlib.Path(sys.executable).resolve().parent.parent
 assert pathlib.Path(sys.base_prefix).resolve() == root / 'python'
 assert pathlib.Path(lxml.__file__).resolve().is_relative_to(root)
 assert pathlib.Path(wbot.__file__).resolve().is_relative_to(root)
+assert pathlib.Path(element_versions.__file__).resolve().is_relative_to(root)
+element = normalize_element({'id': 'portable-check', 'name': 'portable-check', 'xpath': '//button'})
+assert element_versions.canonical_items([element])[0]['id'] == 'portable-check'
 assert site.ENABLE_USER_SITE is False
 assert all(pathlib.Path(path).resolve().is_relative_to(root) for path in sys.path)
 print(json.dumps({'python':sys.version.split()[0], 'wbot':m.version('wbot'), 'lxml':m.version('lxml')}))
@@ -317,6 +323,10 @@ def verify_desktop(bundle):
             settings = _request(_read_metadata(state), '/api/settings')['settings']
             if settings['binding_state'] != 'unconfigured' or 'secret' in settings:
                 raise RuntimeError('冻结界面启动的后台设置接口无效')
+            shared = _request(_read_metadata(state), '/api/shared-elements/status', {
+                'library_path': str(Path(temporary) / '元素工作副本.sqlite3')})
+            if 'binding' not in shared or shared['binding'] is not None or shared.get('dirty') is not False:
+                raise RuntimeError('冻结界面启动的后台共享元素接口未返回干净的未绑定工作副本')
             run(command, cwd=temporary, env=environment, timeout=10,
                 stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             if child.poll() is not None:
@@ -345,7 +355,7 @@ def verify_desktop(bundle):
                 raise RuntimeError('退出冻结界面后，后台任务未能独立完成')
             if 'continued-after-ui' not in _request(metadata, '/api/jobs/' + job['id'] + '/log')['log']:
                 raise RuntimeError('冻结界面退出后未取得任务日志')
-            print('冻结 Qt 启动、单实例唤起与界面退出后任务继续执行通过')
+            print('冻结 Qt 启动、共享元素状态、单实例唤起与界面退出后任务继续执行通过')
         finally:
             if child.poll() is None:
                 child.terminate()
@@ -380,6 +390,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description='构建 Qt Assistant Windows 便携目录')
     parser.add_argument('--distpath', type=Path, default=ROOT / 'dist')
     parser.add_argument('--verify-only', action='store_true', help='只验证已有便携包的 Qt、Python 与真实执行链路')
+    parser.add_argument('--release-notes', type=Path, help='UTF-8 更新说明文本（最多 8000 字）')
     args = parser.parse_args(argv)
     if sysconfig.get_platform() != 'win-amd64':
         parser.error('此构建脚本当前只支持 Windows x64 Python')
@@ -415,6 +426,11 @@ def main(argv=None):
     verify_desktop(bundle)
     verify_remote_connection(bundle)
     remove_generated_bytecode(bundle)
+    from app.assistant.version import VERSION
+    from app.assistant_release import release_metadata, RELEASE_FILE, PLATFORM
+    notes = args.release_notes.read_text(encoding='utf-8') if args.release_notes else 'Assistant 界面、执行与在线更新功能改进。'
+    release = release_metadata(dict(schema=1, product='wbot-assistant', platform=PLATFORM, version=VERSION, notes=notes))
+    (bundle / RELEASE_FILE).write_text(json.dumps(release, ensure_ascii=False), encoding='utf-8')
     write_manifest(bundle)
     archive = destination / 'WBotAssistant-windows-x64.zip'
     # 直接继承输出目录 ACL；Windows 的私有临时目录会把 ZIP 的读取权限一并带走。

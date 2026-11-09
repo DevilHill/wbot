@@ -1,6 +1,8 @@
 """Assistant 本机接口的授权、路径和任务请求边界。"""
 import http.client
 import json
+from pathlib import Path
+import tempfile
 import threading
 import unittest
 
@@ -8,8 +10,10 @@ from app.assistant.server import create_server
 
 
 class RecordingExecution:
-    def __init__(self):
+    def __init__(self, state_dir):
         self.submissions = []
+        self.state_dir = Path(state_dir)
+        self.updating = False
 
     def list_packages(self):
         return [{"id": "demo-1", "manifest": {"name": "演示", "version": "1.0.0"}}]
@@ -30,7 +34,9 @@ class RecordingExecution:
 
 class AssistantServerTests(unittest.TestCase):
     def setUp(self):
-        self.execution = RecordingExecution()
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.execution = RecordingExecution(temporary.name)
         self.server = create_server(self.execution)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

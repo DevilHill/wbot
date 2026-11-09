@@ -1,10 +1,11 @@
 """Qt 桌面入口、当前用户单实例唤起与系统托盘。"""
 import hashlib
+import json
 import os
 from pathlib import Path
 import sys
 
-from PySide6.QtCore import QLockFile, QObject, Signal
+from PySide6.QtCore import QLockFile, QObject, Signal, QTimer
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import QApplication, QMenu, QSystemTrayIcon
 
@@ -79,7 +80,7 @@ def open_desktop(state_dir):
     application = QApplication.instance() or QApplication(sys.argv[:1])
     application.setApplicationName('WBot Assistant')
     application.setOrganizationName('WBot')
-    apply_theme(application)
+    apply_theme(application, state_dir)
     icon = make_app_icon()
     application.setWindowIcon(icon)
     instance = DesktopInstance(state_dir, application)
@@ -107,6 +108,12 @@ def open_desktop(state_dir):
     application.aboutToQuit.connect(client.close)
     application.aboutToQuit.connect(instance.close)
     window.show_window()
+    if os.environ.get('WBOT_UPDATE_TOKEN'):
+        from .version import VERSION
+        def confirm_ready():
+            receipt = {'token': os.environ.pop('WBOT_UPDATE_TOKEN'), 'version': VERSION}
+            (Path(state_dir) / 'update-ui-ready.json').write_text(json.dumps(receipt), encoding='utf-8')
+        QTimer.singleShot(0, confirm_ready)
     try:
         return application.exec()
     finally:

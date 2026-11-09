@@ -1,5 +1,6 @@
 """为 React 管理端提供同源 API 与构建后的静态资源。"""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from app.assistant_release import MAX_RELEASE_BYTES
 import json
 import logging
 import mimetypes
@@ -8,6 +9,8 @@ import secrets
 import tempfile
 import threading
 from urllib.parse import unquote, urlsplit
+
+from .element_routes import admin_elements
 
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
@@ -112,8 +115,9 @@ class OcHandler(BaseHTTPRequestHandler):
             raise ValueError('请求必须是 JSON 对象')
         return body
 
-    def _upload_package(self):
-        size = self._body_size(MAX_UPLOAD_BYTES, {'application/octet-stream', 'application/zip'})
+    def _upload_archive(self, kind):
+        maximum = MAX_RELEASE_BYTES if kind == 'release' else MAX_UPLOAD_BYTES
+        size = self._body_size(maximum, {'application/octet-stream', 'application/zip'})
         with tempfile.TemporaryDirectory(prefix='wbot-oc-upload-') as directory:
             archive = Path(directory) / 'upload.wbot.zip'
             with archive.open('xb') as stream:
@@ -124,8 +128,9 @@ class OcHandler(BaseHTTPRequestHandler):
                         raise ValueError('发布包未完整接收')
                     stream.write(chunk)
                     remaining -= len(chunk)
-            package = self.server.service.import_package(archive)
-        self._json(201, {'package': package})
+            importer = self.server.service.releases.upload if kind == 'release' else self.server.service.import_package
+            record = importer(archive)
+        self._json(201, {kind: record})
 
     def do_GET(self):
         self._handle('GET')
@@ -144,7 +149,9 @@ class OcHandler(BaseHTTPRequestHandler):
             if method == 'GET':
                 self._get(path)
             elif path == '/api/oc/packages' and method == 'POST':
-                self._upload_package()
+                self._upload_archive('package')
+            elif path == '/api/oc/assistant-releases' and method == 'POST':
+                self._upload_archive('release')
             else:
                 self._mutate(method, path, self._read_json())
         except (BrokenPipeError, ConnectionResetError):
@@ -174,6 +181,10 @@ class OcHandler(BaseHTTPRequestHandler):
         elif path == '/api/oc/state':
             snapshot = service.snapshot()
             self._json(200, dict(snapshot, meta={'mode': 'local', 'organization': '默认组织'}))
+        elif path == '/api/oc/assistant-releases':
+            self._json(200, {'items': service.releases.list()})
+        elif path.startswith('/api/oc/elements/'):
+            self._json(*admin_elements(service.elements, 'GET', path))
         elif path.startswith('/api/oc/jobs/'):
             parts = path.strip('/').split('/')
             if len(parts) == 4:
@@ -187,7 +198,11 @@ class OcHandler(BaseHTTPRequestHandler):
 
     def _mutate(self, method, path, body):
         service = self.server.service
-        if method == 'POST' and path == '/api/oc/devices':
+        if method == 'PATCH' and path.startswith('/api/oc/assistant-releases/'):
+            self._json(200, {'release': service.releases.publish(path.removeprefix('/api/oc/assistant-releases/'), body)})
+        elif path.startswith('/api/oc/elements/'):
+            self._json(*admin_elements(service.elements, method, path, body))
+        elif method == 'POST' and path == '/api/oc/devices':
             self._json(201, {'device': service.add_device(body.get('name'), body.get('state_dir'))})
         elif method == 'POST' and path == '/api/oc/processes':
             self._json(201, {'process': service.create_process(body)})

@@ -9,6 +9,10 @@ from .lifecycle import _read_metadata
 from .protocol import MAX_REQUEST_BYTES
 
 
+SETTINGS_UNSUPPORTED = ('当前本机后台不支持连接设置。请先完成正在运行的任务，再停止旧后台并从新版 Assistant 重新启动；'
+                        '只关闭窗口不会停止后台。')
+
+
 MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 
 
@@ -82,6 +86,10 @@ class AssistantClient(QObject):
                     raise ValueError('后台服务返回了重定向，已拒绝转发会话')
                 if status is None:
                     raise ValueError('无法连接后台服务，请检查服务是否运行')
+                if int(status) == 404 and (path == '/api/settings' or path.startswith('/api/settings/')):
+                    raise ValueError(SETTINGS_UNSUPPORTED)
+                if int(status) == 404 and (path == '/api/updates' or path.startswith('/api/updates/')):
+                    raise ValueError('当前后台尚不支持在线更新，请先完成任务并手动升级到支持在线更新的便携版。')
                 try:
                     payload = json.loads(content.decode('utf-8'))
                 except (ValueError, UnicodeError) as exc:

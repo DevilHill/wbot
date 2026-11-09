@@ -1,0 +1,7 @@
+.release-panel { margin-top: 24px; }
+.release-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px; }
+.release-notes { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 480px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+.release-actions { display: flex; align-items: center; gap: 8px; }
+.release-device-list { border: 1px solid var(--line); border-radius: 12px; max-height: 260px; overflow: auto; margin: 16px 0; padding: 14px; }
+.release-device-list label { display: flex; gap: 10px; align-items: center; padding: 8px 0; overflow-wrap: anywhere; }
+@media (max-width: 720px) { .release-actions { flex-wrap: wrap; } }

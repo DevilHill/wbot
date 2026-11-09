@@ -28,3 +28,10 @@ test('超限文件在读取前拒绝', async () => {
   await assert.rejects(snapshotUploadFile(selected), /不能超过 68 MiB/);
   assert.equal(read, false);
 });
+
+test('客户端更新包使用独立的 128 MiB 上限，自动化包仍保持 68 MiB', async () => {
+  const selected = new File(['release'], 'WBotAssistant.zip');
+  Object.defineProperty(selected, 'size', { value: 80 * 1024 * 1024 });
+  await assert.rejects(snapshotUploadFile(selected), /68 MiB/);
+  assert.equal((await snapshotUploadFile(selected, 128 * 1024 * 1024)).name, selected.name);
+});

@@ -87,6 +87,13 @@ def _record(record):
                 created_at=created, updated_at=updated)
 
 
+def normalize_element(record):
+    """验证元素并返回独立的公开记录，不写入数据库。"""
+    item = _record(record)
+    item['frame'] = json.loads(item['frame'])
+    return item
+
+
 class ElementLibrary:
     """持久化元素库。每个调用单独连接；同名约束为 (group, name)。"""
     def __init__(self, path=None):

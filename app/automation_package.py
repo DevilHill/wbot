@@ -29,7 +29,7 @@ MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_METADATA_BYTES = 256 * 1024
 MANIFEST_FIELDS = {'schemaVersion', 'name', 'version', 'entry', 'files',
                    'parameters', 'requirements', 'elements'}
-PARAMETER_FIELDS = {'type', 'required', 'default', 'description'}
+PARAMETER_FIELDS = {'type', 'required', 'default', 'description', 'title'}
 TRANSIENT_ELEMENT_FIELDS = {'browserId', 'tabId', 'frameId', 'documentId', 'parentFrameId', 'lastPickAt'}
 PACKAGE_VERSION = r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?'
 DEPENDENCY_VERSION = r'\d+(?:\.\d+)*(?:(?:a|b|rc)\d+)?(?:\.post\d+)?(?:\.dev\d+)?(?:\+[A-Za-z0-9]+(?:[._-][A-Za-z0-9]+)*)?'
@@ -117,6 +117,8 @@ def _validate_parameters(parameters):
             raise ValueError(f'参数 {name} 的 required 必须是布尔值')
         if 'description' in definition and not isinstance(definition['description'], str):
             raise ValueError(f'参数 {name} 的 description 必须是字符串')
+        if 'title' in definition and (not isinstance(definition['title'], str) or not definition['title'].strip() or len(definition['title']) > 120):
+            raise ValueError(f'参数 {name} 的 title 必须为 1–120 个字符')
         if 'default' in definition:
             _validate_value(name, definition, definition['default'])
 

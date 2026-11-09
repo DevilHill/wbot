@@ -2,6 +2,7 @@
 from io import BytesIO
 from pathlib import Path
 import json
+import sys
 import zipfile
 
 def verify_wheel_sources(wheel, root):
@@ -21,6 +22,8 @@ def main():
     root = extension.parent
     source_manifest = json.loads((extension / 'package.json').read_text(encoding='utf-8'))
     package = root / f"dist/wbot-studio-{source_manifest['version']}.vsix"
+    if len(sys.argv) > 1:
+        package = Path(sys.argv[1]).resolve()
     checked = 0
     with zipfile.ZipFile(package) as archive:
         names = set(archive.namelist())
@@ -31,7 +34,8 @@ def main():
         assert commands == {item['command'] for item in source_manifest['contributes']['commands']}
         assert {'wbot.newScript', 'wbot.runFile', 'wbot.debugFile', 'wbot.pick',
                 'wbot.insertElement', 'wbot.startBridge', 'wbot.installRuntime',
-                'wbot.initProject', 'wbot.buildPackage'} <= commands
+                'wbot.initProject', 'wbot.buildPackage', 'wbot.sharedElements',
+                'wbot.connectSharedElements', 'wbot.requestElementMerge'} <= commands
         assert not {'wbot.newFlow', 'wbot.openWorkbench'} & commands
         assert not manifest['contributes'].get('customEditors')
         assert not any(event.startswith('onCustomEditor:') for event in manifest['activationEvents'])
@@ -40,6 +44,8 @@ def main():
                      'extension/runtime/app/assistant/web/')
         assert not any(name.startswith(forbidden) or name.endswith('.wbot.json') for name in names)
         assert {'extension/runtime/app/automation_package.py', 'extension/runtime/app/processes.py'} <= names
+        assert {'extension/src/assistant-client.js', 'extension/src/shared-elements.js',
+                'extension/src/shared-element-documents.js'} <= names
         for name in names:
             if not name.startswith('extension/') or name.endswith('/'):
                 continue

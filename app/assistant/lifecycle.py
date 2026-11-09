@@ -159,6 +159,9 @@ def serve(state_dir, port=8791):
     state_dir = Path(state_dir).resolve()
     with ServiceLock(state_dir):
         execution = ExecutionService(state_dir)
+        update_token = os.environ.pop('WBOT_UPDATE_TOKEN', '')
+        if update_token:
+            execution.begin_update(update_token)
         connection = ConnectionService(state_dir, execution)
         server = None
         metadata_path = state_dir / METADATA_FILE

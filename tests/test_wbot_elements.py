@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from wbot.elements import ElementLibrary, validate_xpath
+from wbot.elements import ElementLibrary, normalize_element, validate_xpath
 from wbot.selector import Selector, SelectorStore
 
 
@@ -20,6 +20,16 @@ class ElementLibraryTests(unittest.TestCase):
 
     def export(self, *records):
         return dict(format='wbot-elements', version=1, items=list(records))
+
+    def test_normalize_element_validates_without_writing_and_preserves_frame_object(self):
+        original = self.record(id='login', frame={'url': 'https://example.test/frame'})
+        normalized = normalize_element(original)
+        self.assertEqual(normalized['frame'], original['frame'])
+        self.assertEqual(normalized['group'], '默认')
+        self.assertEqual(self.library.list(), [])
+        self.assertNotIn('created_at', original)
+        with self.assertRaises(ValueError):
+            normalize_element(dict(original, xpath='count(//button)'))
 
     def test_reopen_update_delete(self):
         original = self.library.upsert(self.record(frame={'frameId': 3, 'url': 'https://example.test/frame'}))

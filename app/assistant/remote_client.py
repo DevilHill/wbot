@@ -104,9 +104,12 @@ class GatewayClient:
         expected_size = command.get('package_size')
         if type(expected_size) is not int or not 0 < expected_size <= MAX_ARCHIVE_BYTES:
             raise ValueError('OC 发布包大小无效或超过 68 MiB')
+        self.download_file(endpoint, destination, expected_size, command.get('package_sha256'), stop)
+
+    def download_file(self, endpoint, destination, expected_size, expected_digest, stop, *, timeout=120, on_progress=None):
         digest = hashlib.sha256()
         received = 0
-        deadline = time.monotonic() + 120
+        deadline = time.monotonic() + timeout
         with self._request(endpoint) as response, Path(destination).open('xb') as output:
             while chunk := response.read1(65536):
                 if stop.is_set():
@@ -116,5 +119,7 @@ class GatewayClient:
                     raise ValueError('OC 发布包下载超出声明大小或超时')
                 digest.update(chunk)
                 output.write(chunk)
-        if received != expected_size or digest.hexdigest() != command.get('package_sha256'):
+                if on_progress is not None:
+                    on_progress(received)
+        if received != expected_size or digest.hexdigest() != expected_digest:
             raise ValueError('OC 发布包校验失败，未执行自动化')

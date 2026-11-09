@@ -60,6 +60,25 @@ class ExecutionService:
         self._close_process_tree = None
         self._stop_requested = False
         self._closed = False
+        self.updating = False
+        self._update_token = ''
+
+    def begin_update(self, token):
+        with self._lock:
+            self._require_open()
+            if self._active_id is not None:
+                raise RuntimeError('当前有任务执行，请等待任务结束后再更新')
+            self.updating = True
+            self._update_token = token
+
+    def authorize_update(self, token):
+        if not self._update_token or token != self._update_token:
+            raise PermissionError('更新操作凭据无效')
+
+    def resume_update(self, token):
+        with self._lock:
+            self.authorize_update(token)
+            self.updating = False
 
     def install_package(self, path):
         with self._lock:
@@ -174,6 +193,8 @@ class ExecutionService:
     def _require_open(self):
         if self._closed:
             raise RuntimeError('执行服务已关闭')
+        if self.updating:
+            raise RuntimeError('Assistant 正在更新，暂不接受新任务或安装包')
 
     def _prepare_job(self, job, package):
         directory = self.jobs_dir / job['id']

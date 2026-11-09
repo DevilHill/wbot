@@ -1,4 +1,5 @@
 """持久保存后台设置，由独立执行服务负责绑定、拉取和回报 OC 作业。"""
+from contextlib import contextmanager
 import logging
 from pathlib import Path
 import secrets
@@ -34,6 +35,20 @@ class ConnectionService:
         self._thread = threading.Thread(target=self._run, name='assistant-oc-connection', daemon=True)
         self._thread.start()
 
+    @contextmanager
+    def remote_session(self):
+        """一次开发者操作固定使用当前已批准身份，期间不能切换后台。"""
+        if not self._operation.acquire(timeout=6):
+            raise RuntimeError('正在与 OC 同步任务，请稍后重试')
+        try:
+            settings = self.store.settings()
+            if (self._stop.is_set() or not settings or not settings['enabled']
+                    or settings['binding_state'] != 'approved'):
+                raise PermissionError('请先在 Assistant 连接 OC，并等待管理员批准设备绑定')
+            yield settings, GatewayClient(settings, stop=self._stop)
+        finally:
+            self._operation.release()
+
     def close(self):
         self._stop.set()
         self._wake.set()
@@ -68,7 +83,7 @@ class ConnectionService:
         return count
 
     def _busy(self):
-        return any(job['state'] in ACTIVE_STATES for job in self.execution.job_summary()['items'])
+        return self.execution.updating or any(job['state'] in ACTIVE_STATES for job in self.execution.job_summary()['items'])
 
     def _require_idle(self):
         if self._busy():
@@ -159,6 +174,8 @@ class ConnectionService:
 
     def synchronize(self):
         with self._operation:
+            if self.execution.updating:
+                return
             settings = self.store.settings()
             if settings is None or not settings['enabled'] or self._stop.is_set():
                 return

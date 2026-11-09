@@ -10,6 +10,10 @@ import threading
 from urllib.parse import urlsplit
 
 from .protocol import MAX_REQUEST_BYTES
+from .shared_elements import SharedElementService
+from .remote_client import GatewayError
+from .updates import UpdateService
+from .version import VERSION
 
 
 WEB_ROOT = Path(__file__).with_name("web")
@@ -22,10 +26,16 @@ STATIC_FILES = {
 
 class AssistantServer(ThreadingHTTPServer):
     def __init__(self, execution, port, connection=None):
+        self.updates = UpdateService(execution, connection)
         super().__init__(("127.0.0.1", port), AssistantHandler)
         self.execution = execution
         self.oc_connection = connection
+        self.shared_elements = SharedElementService(connection) if connection is not None else None
         self.token = secrets.token_urlsafe(32)
+
+    def server_close(self):
+        self.updates.close()
+        super().server_close()
 
     @property
     def origin(self):
@@ -126,6 +136,10 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._json(400, {"error": str(exc)})
         except RuntimeError as exc:
             self._json(409, {"error": str(exc)})
+        except PermissionError as exc:
+            self._json(403, {"error": str(exc)})
+        except GatewayError as exc:
+            self._json(exc.status if exc.status in (400, 403, 404, 409, 413) else 503, {"error": str(exc)})
         except OSError as exc:
             self._json(500, {"error": f"本机读写失败：{exc}"})
         except Exception:
@@ -137,7 +151,10 @@ class AssistantHandler(BaseHTTPRequestHandler):
         if path == "/api/session":
             self._json(200, {"token": self.server.token, "mode": "local"})
         elif path == "/api/health":
-            self._json(200, {"ok": True, "product": "wbot-assistant", "mode": "local"})
+            self._json(200, {"ok": True, "product": "wbot-assistant", "mode": "local",
+                             "version": VERSION, "updating": execution.updating})
+        elif path == '/api/updates':
+            self._json(200, {'update': self.server.updates.snapshot()})
         elif path == "/api/packages":
             self._json(200, {"items": execution.list_packages()})
         elif path == "/api/settings":
@@ -162,7 +179,12 @@ class AssistantHandler(BaseHTTPRequestHandler):
 
     def _post(self, path, body):
         execution = self.server.execution
-        if path == "/api/settings/connect":
+        if path.startswith('/api/updates/'):
+            self._update_action(path, body)
+        elif path.startswith('/api/shared-elements/'):
+            self._connection()
+            self._json(200, self.server.shared_elements.dispatch(path.removeprefix('/api/shared-elements/'), body))
+        elif path == "/api/settings/connect":
             if set(body) != {'server_url', 'device_name'}:
                 raise ValueError('连接设置需要 server_url 与 device_name')
             self._json(200, {'settings': self._connection().connect(body['server_url'], body['device_name'])})
@@ -199,6 +221,31 @@ class AssistantHandler(BaseHTTPRequestHandler):
         if self.server.oc_connection is None:
             raise RuntimeError('此执行服务尚未启用连接设置，请更新并重启 Assistant 后台服务')
         return self.server.oc_connection
+
+    def _update_action(self, path, body):
+        updates = self.server.updates
+        if path in ('/api/updates/check', '/api/updates/download'):
+            if body:
+                raise ValueError('检查或下载更新不接受额外参数')
+            result = updates.check() if path.endswith('/check') else updates.download()
+        elif path == '/api/updates/install':
+            if set(body) != {'desktop_pid'}:
+                raise ValueError('安装更新需要界面进程标识')
+            result = updates.install(body['desktop_pid'])
+        elif path in ('/api/updates/stop', '/api/updates/resume'):
+            self.server.execution.authorize_update(body.get('token'))
+            if path.endswith('/stop'):
+                if not self.server.execution.updating:
+                    raise RuntimeError('更新尚未锁定执行端')
+                self._json(200, {'ok': True})
+                threading.Thread(target=self.server.shutdown, daemon=True).start()
+                return
+            self.server.execution.resume_update(body['token'])
+            result = updates.snapshot()
+        else:
+            self._json(404, {'error': '更新接口不存在'})
+            return
+        self._json(200, {'update': result})
 
 
 def create_server(execution, port=0, connection=None):

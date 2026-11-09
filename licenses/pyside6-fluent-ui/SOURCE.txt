@@ -1,0 +1,5 @@
+Reviewed 2026-11-09
+Source: installed pyside6-fluent-ui/templates/pyside6_fluent_ui/windows_title_bar.py
+Upstream commit: not supplied in installed package
+SHA256: 66a01aee9419805aa3d0fac2c9ee56b9b348d83dd430a1c448e11efb7a4bcdba
+Modification: local dynamic-property helper; original native-event behavior retained.

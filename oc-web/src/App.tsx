@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Activity, ArrowUpRight, Box, CheckCircle2, ChevronRight, CircleHelp, FolderGit2, LayoutDashboard, Menu, Monitor, RefreshCw, ShieldCheck, X } from 'lucide-react';
+import { Activity, ArrowUpRight, Box, CheckCircle2, ChevronRight, CircleHelp, Code2, FolderGit2, LayoutDashboard, Menu, Monitor, RefreshCw, ShieldCheck, X } from 'lucide-react';
 import { errorMessage, getSession, readSnapshot, request } from './api';
 import { DeviceDialog, ProcessDialog, RunDialog, UploadDialog } from './forms';
 import { Jobs, Overview, Packages, Processes } from './pages';
 import { Devices } from './device-page';
+import { SharedElements } from './element-page';
+import { AssistantReleases } from './assistant-releases';
 import { JobDetails, PackageDetails } from './details';
 import type { Device, Job, Package, Process, Section, Session, Snapshot } from './types';
 
@@ -11,7 +13,9 @@ const navigation = [
   { id: 'overview', label: '运营概览', icon: LayoutDashboard },
   { id: 'processes', label: '流程部署', icon: FolderGit2 },
   { id: 'packages', label: '自动化包', icon: Box },
+  { id: 'elements', label: '共享元素', icon: Code2 },
   { id: 'devices', label: '执行设备', icon: Monitor },
+  { id: 'updates', label: '客户端更新', icon: RefreshCw },
   { id: 'jobs', label: '作业记录', icon: Activity },
 ] as const;
 type Modal = { type: 'upload' } | { type: 'device' } | { type: 'process'; process?: Process } | { type: 'run'; process: Process } | { type: 'package'; item: Package } | { type: 'job'; job: Job } | null;
@@ -95,7 +99,7 @@ export default function App() {
     },
     pendingAction,
   };
-  const Page = { overview: Overview, processes: Processes, packages: Packages, devices: Devices, jobs: Jobs }[section];
+  const Page = { overview: Overview, processes: Processes, packages: Packages, elements: SharedElements, devices: Devices, jobs: Jobs, updates: AssistantReleases }[section];
   const activeSection = navigation.find(item => item.id === section)!;
   const closeModal = () => setModal(null);
   return <div className="app-shell">

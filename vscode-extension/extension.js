@@ -5,6 +5,12 @@ const path = require('node:path');
 const core = require('./src/core');
 const {BridgeManager} = require('./src/bridge');
 const {createProjectCommands} = require('./src/project');
+const {createSharedElementCommands} = require('./src/shared-elements');
+
+const {createSharedView} = require('./src/shared-view');
+const {editElementDraft} = require('./src/element-input');
+const {assistantStateDir, requestAssistant} = require('./src/assistant-client');
+const {createSharedElementDocuments} = require('./src/shared-element-documents');
 
 let manager;
 function activate(context) {
@@ -12,11 +18,18 @@ function activate(context) {
   const runtime = path.join(context.extensionPath, 'runtime');
   manager = new BridgeManager(runtime, text => output.append(text));
   const changes = new vscode.EventEmitter();
+  const elementDocuments = createSharedElementDocuments(vscode, context);
+  const validations = new Map();
+  const sharedView = createSharedView(vscode, context, () => {
+    trusted();
+    const cfg = settings();
+    return requestAssistant(assistantStateDir(cfg.assistantStateDir), 'status', {library_path:cfg.libraryPath});
+  });
   let records = [], query = '', generation = 0, picking = false;
   const settings = resource => {
     const cfg = vscode.workspace.getConfiguration('wbot', resource);
     return {baseUrl:core.bridgeUrl(cfg.get('bridgeUrl')), libraryPath:core.libraryPath(cfg.get('libraryPath')),
-      pythonPath:cfg.get('pythonPath'), scriptArgs:cfg.get('scriptArgs', [])};
+      pythonPath:cfg.get('pythonPath'), scriptArgs:cfg.get('scriptArgs', []), assistantStateDir:cfg.get('assistantStateDir')};
   };
   function trusted() {
     if (!vscode.workspace.isTrusted) throw new Error('请先将工作区设为受信任，再使用 WBot');
@@ -38,7 +51,7 @@ function activate(context) {
       const r = node.record, item = new vscode.TreeItem(r.name, vscode.TreeItemCollapsibleState.None);
       item.id = r.id; item.contextValue = 'wbot.element'; item.iconPath = new vscode.ThemeIcon('symbol-field');
       item.description = r.xpath; item.tooltip = `${r.group} / ${r.name}\n${r.xpath}\n${r.url || ''}\n${r.description || ''}`;
-      item.command = {command:'wbot.copyXPath', title:'复制 XPath', arguments:[node]}; return item;
+      item.command = {command:'wbot.elementDetails', title:'查看元素详情', arguments:[node]}; return item;
     }
   };
   const view = vscode.window.createTreeView('wbot.elements', {treeDataProvider:provider, showCollapseAll:true});
@@ -51,10 +64,12 @@ function activate(context) {
       if (!Array.isArray(data.items)) throw new Error('元素库响应无效，请更新浏览器服务');
       if (current !== generation) return;
       records = data.items; view.message = query ? `搜索：${query}` : `${records.length} 个元素`;
-      status.text = '$(check) WBot'; view.description = '已连接'; changes.fire();
+      vscode.commands.executeCommand('setContext', 'wbot.bridgeConnected', true);
+      status.text = '$(check) WBot 浏览器'; view.description = '已连接'; changes.fire();
       return records;
     } catch (error) {
       if (current !== generation) return;
+      vscode.commands.executeCommand('setContext', 'wbot.bridgeConnected', false);
       records = []; view.message = '服务未连接；点击插头图标启动。'; view.description = '离线';
       status.text = '$(plug) WBot'; changes.fire();
       if (!silent) throw error;
@@ -87,14 +102,9 @@ function activate(context) {
       {placeHolder:'选择元素',matchOnDescription:true,matchOnDetail:true}))?.record;
   }
   async function editRecord(original = {}) {
-    const input = (title, value, required = false) => vscode.window.showInputBox({title,value:value || '',ignoreFocusOut:true,
-      validateInput:value => required && !value.trim() ? '不能为空' : undefined});
-    const name = await input('元素名称', original.name, true); if (name === undefined) return;
-    const group = await input('元素分组', original.group || '默认', true); if (group === undefined) return;
-    const xpath = await input('XPath', original.xpath, true); if (xpath === undefined) return;
-    const url = await input('所属页面 URL（可留空）', original.url); if (url === undefined) return;
-    const description = await input('元素描述（可留空）', original.description); if (description === undefined) return;
-    const result = await api('/api/elements/save', {record:{...original,name,group,xpath,url,description}});
+    const record = await editElementDraft(vscode, original);
+    if (!record) return;
+    const result = await api('/api/elements/save', {record});
     await refresh(); return result.item;
   }
   async function insertElement(node) {
@@ -138,6 +148,7 @@ function activate(context) {
     if (!payload?.frame?.documentId || !payload.browserId) throw new Error('请先在对应网页重新抓取元素');
     if (!core.scopeMatches(record, payload)) throw new Error('该元素来自其他页面或框架，请先在对应页面重新抓取');
     const result = await api('/api/bridge/validate', {action:'validate',xpath:record.xpath,target:{...payload.frame,browserId:payload.browserId}});
+    validations.set(record.id, {xpath:record.xpath, result, checkedAt:new Date().toLocaleString()});
     if (!result.valid) throw new Error(result.error || 'XPath 无效');
     vscode.window.showInformationMessage(`「${record.name}」匹配 ${result.count} 个节点，已高亮 ${result.highlighted || 0} 个元素。`);
     return result;
@@ -194,6 +205,13 @@ function activate(context) {
   }
   const handlers = {
     ...createProjectCommands({vscode, runtime, output, pythonExecutable}),
+    ...createSharedElementCommands({vscode, context, settings, refresh, onStatus:sharedView.update}),
+    refreshSharedView:() => sharedView.refresh(),
+    elementDetails:async node => {
+      const record = await chooseElement(node); if (!record) return;
+      const checked = validations.get(record.id);
+      return elementDocuments.status({名称:record.name, 分组:record.group, XPath:record.xpath, 页面:record.url, 描述:record.description, 框架:record.frame, 最近验证:checked?.xpath === record.xpath ? checked : '尚未验证；可通过元素右键菜单校验并高亮'}, '元素详情');
+    },
     startBridge:start, stopBridge:async () => { const stopped = await manager.stop(); await refresh(true);
       vscode.window.showInformationMessage(stopped ? '已停止本扩展启动的服务' : '没有本扩展启动的服务；外部服务保持运行'); },
     refresh:() => refresh(), pick, saveLastPick, addElement:() => editRecord(),
@@ -228,15 +246,17 @@ function activate(context) {
   };
   for (const [name, handler] of Object.entries(handlers)) {
     context.subscriptions.push(vscode.commands.registerCommand('wbot.'+name, async (...args) => {
-      try { trusted(); return await handler(...args); }
+      try { trusted(); const result = await handler(...args);
+        if (['connectSharedElements','commitSharedElements','requestElementMerge','pullSharedElements','addElement','editElement','deleteElement','importElements','pick'].includes(name)) sharedView.refresh();
+        return result; }
       catch (error) { output.appendLine(error.stack || String(error)); vscode.window.showErrorMessage('WBot: '+error.message); return undefined; }
     }));
   }
   context.subscriptions.push(output,view,status,changes,{dispose:() => manager.dispose()},
-    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('wbot')) refresh(true); }));
-  if (vscode.workspace.isTrusted && !vscode.env.remoteName) refresh(true);
+    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('wbot')) { validations.clear(); sharedView.invalidate(); refresh(true); sharedView.refresh(); } }));
+  if (vscode.workspace.isTrusted && !vscode.env.remoteName) { refresh(true); sharedView.refresh(); }
   // 供集成测试与其他扩展只读查看状态；不添加隐藏的执行命令。
-  return {refresh, getElements:() => structuredClone(records), provider, bridge:manager};
+  return {refresh, getElements:() => structuredClone(records), provider, sharedView, bridge:manager};
 }
 async function deactivate() { if (manager) await manager.stop(); }
 module.exports = {activate,deactivate};

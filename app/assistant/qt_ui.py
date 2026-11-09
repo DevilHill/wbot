@@ -2,17 +2,20 @@
 import json
 
 from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel,
                                QLineEdit, QListWidget, QListWidgetItem, QMainWindow,
-                               QPushButton, QTabWidget, QVBoxLayout, QWidget)
+                               QPushButton, QStackedWidget, QVBoxLayout, QWidget)
 
+from .qt_chrome import CaptionWindowMixin, install_title_bar
+from .qt_controls import AnimatedTabWidget
 from .qt_dialogs import JobDialog, ParameterDialog, label
-from .qt_settings import SettingsDialog
+from .qt_settings import SettingsPage, BINDING_LABELS
 from .qt_theme import (ACTIVE_STATES, STATE_LABELS, CardItemDelegate,
                        display_time, make_app_icon, make_symbol_icon)
 
 
-class AssistantWindow(QMainWindow):
+class AssistantWindow(CaptionWindowMixin, QMainWindow):
     def __init__(self, client, state_dir, parent=None):
         super().__init__(parent)
         self.client = client
@@ -23,6 +26,7 @@ class AssistantWindow(QMainWindow):
         self.jobs = []
         self.job_total = 0
         self.active_parameter_dialog = None
+        self.settings_page = None
         self._dialogs = []
         self._file_dialog = None
         self._pending_refresh = 0
@@ -37,6 +41,9 @@ class AssistantWindow(QMainWindow):
         self.resize(480, 700)
         self.setMinimumSize(420, 560)
         self._build()
+        install_title_bar(self)
+        self.back_shortcut = QShortcut(QKeySequence('Escape'), self)
+        self.back_shortcut.activated.connect(self.show_home)
         self.timer = QTimer(self)
         self.timer.setInterval(1500)
         self.timer.timeout.connect(self.refresh)
@@ -45,7 +52,10 @@ class AssistantWindow(QMainWindow):
 
     def _build(self):
         body = QWidget()
-        self.setCentralWidget(body)
+        self.home_page = body
+        self.pages = QStackedWidget()
+        self.pages.addWidget(body)
+        self.setCentralWidget(self.pages)
         layout = QVBoxLayout(body)
         layout.setContentsMargins(28, 26, 28, 20)
         layout.setSpacing(18)
@@ -73,6 +83,11 @@ class AssistantWindow(QMainWindow):
         self.settings_button.clicked.connect(self.open_settings)
         header.addWidget(self.settings_button)
         layout.addLayout(header)
+        self.oc_connection = QPushButton('OC：读取连接状态…')
+        self.oc_connection.setObjectName('ocConnection')
+        self.oc_connection.setAccessibleName('OC 连接状态，打开设置')
+        self.oc_connection.clicked.connect(self.open_settings)
+        layout.addWidget(self.oc_connection)
         tools = QHBoxLayout()
         tools.setSpacing(8)
         self.search = QLineEdit()
@@ -98,7 +113,7 @@ class AssistantWindow(QMainWindow):
         self.message = label('', 'message', True)
         self.message.hide()
         layout.addWidget(self.message)
-        self.tabs = QTabWidget()
+        self.tabs = AnimatedTabWidget()
         self.tabs.setObjectName('mainTabs')
         self.tabs.setDocumentMode(True)
         self.tabs.tabBar().setExpanding(True)
@@ -209,11 +224,31 @@ class AssistantWindow(QMainWindow):
     def refresh(self):
         if self._closed or self._pending_refresh:
             return
-        self._pending_refresh = 2
+        self._pending_refresh = 3
         self._refresh_errors = []
         self.refresh_button.setEnabled(False)
+        self.client.request('GET', '/api/settings', on_success=self._received_connection, on_error=self._connection_failed)
         self.client.request('GET', '/api/packages', on_success=self._received_packages, on_error=self._refresh_failed)
         self.client.request('GET', '/api/jobs/summary', on_success=self._received_jobs, on_error=self._refresh_failed)
+
+    def _received_connection(self, response):
+        if self._closed:
+            return
+        settings = response['settings']
+        state = 'offline' if settings.get('error') else settings.get('binding_state', 'unconfigured')
+        self.oc_connection.setText('OC：' + BINDING_LABELS.get(state, state) + '  ·  连接设置')
+        self.oc_connection.setToolTip(settings.get('server_url') or '填写 OC 地址并申请设备绑定')
+        self.oc_connection.setProperty('offline', state in ('offline', 'revoked', 'rejected'))
+        self.oc_connection.style().unpolish(self.oc_connection)
+        self.oc_connection.style().polish(self.oc_connection)
+        self._finish_refresh()
+
+    def _connection_failed(self, message):
+        if self._closed:
+            return
+        self.oc_connection.setText('OC：状态暂不可用  ·  连接设置')
+        self.oc_connection.setToolTip(message)
+        self._finish_refresh()
 
     def _received_packages(self, response):
         if self._closed:
@@ -248,7 +283,7 @@ class AssistantWindow(QMainWindow):
             return
         was_connected = self.connected
         self.connected = not self._refresh_errors
-        self.connection.setText('● 已连接' if self.connected else '● 未连接')
+        self.connection.setText('本机就绪' if self.connected else '本机离线')
         self.connection.setProperty('offline', not self.connected)
         self.connection.style().unpolish(self.connection)
         self.connection.style().polish(self.connection)
@@ -286,7 +321,7 @@ class AssistantWindow(QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, package['id'])
             item.setIcon(make_symbol_icon('automation', *colors[index % len(colors)]))
             item.setSizeHint(QSize(0, 88))
-            item.setToolTip(package['id'])
+            item.setToolTip(item.text() + '\n' + package['id'])
             self.package_list.addItem(item)
             if package['id'] == selected:
                 self.package_list.setCurrentItem(item)
@@ -317,7 +352,7 @@ class AssistantWindow(QMainWindow):
             else:
                 item.setIcon(make_symbol_icon('history', '#007AFF', '#EAF3FF'))
             item.setSizeHint(QSize(0, 88))
-            item.setToolTip(job['id'])
+            item.setToolTip(item.text() + '\n' + job['package_id'] + '\n' + job['id'])
             self.job_list.addItem(item)
             if job['id'] == selected:
                 self.job_list.setCurrentItem(item)
@@ -422,17 +457,29 @@ class AssistantWindow(QMainWindow):
     def open_settings(self):
         if self._closed:
             return
-        for dialog in self._dialogs:
-            if isinstance(dialog, SettingsDialog):
-                dialog.showNormal()
-                dialog.raise_()
-                dialog.activateWindow()
-                return
-        dialog = SettingsDialog(self.client, self.state_dir, self)
-        dialog.binding_changed.connect(self.settings_button.setToolTip)
-        self._track_dialog(dialog)
+        if self.settings_page is None:
+            self.settings_page = SettingsPage(self.client, self.state_dir, self.pages)
+            self.settings_page.back_requested.connect(self.show_home)
+            self.settings_page.restart_requested.connect(self.shutdown_ui)
+            self.settings_page.binding_changed.connect(self.settings_button.setToolTip)
+            self.pages.addWidget(self.settings_page)
+        self.pages.setCurrentWidget(self.settings_page)
+        if self.isMinimized():
+            self.showNormal()
+        else:
+            self.show()
+        self.raise_()
+        self.activateWindow()
+        self.settings_page.back_button.setFocus()
+
+    def show_home(self):
+        if self._closed or self.pages.currentWidget() is self.home_page:
+            return
+        self.pages.setCurrentWidget(self.home_page)
+        self.settings_button.setFocus()
 
     def _track_dialog(self, dialog):
+        dialog._return_focus = QApplication.focusWidget()
         self._dialogs.append(dialog)
         dialog.finished.connect(lambda _result: self._dialog_closed(dialog))
         dialog.show()
@@ -442,6 +489,8 @@ class AssistantWindow(QMainWindow):
             self.active_parameter_dialog = None
         if dialog in self._dialogs:
             self._dialogs.remove(dialog)
+        if not self._closed and dialog._return_focus is not None:
+            dialog._return_focus.setFocus()
         dialog.deleteLater()
 
     def show_window(self):
@@ -453,6 +502,8 @@ class AssistantWindow(QMainWindow):
     def shutdown_ui(self):
         self._closed = True
         self.timer.stop()
+        if self.settings_page is not None:
+            self.settings_page.close()
         for dialog in list(self._dialogs):
             dialog.close()
         if self._file_dialog:

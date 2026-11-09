@@ -3,13 +3,14 @@ import json
 from uuid import uuid4
 
 from PySide6.QtCore import Qt, QTimer, Signal, QSize
-from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (QComboBox, QDialog, QHBoxLayout, QLabel,
                                QLineEdit, QPlainTextEdit, QPushButton, QScrollArea,
                                QTabWidget, QVBoxLayout, QWidget)
 
 from app.automation_package import resolve_parameters
 from .protocol import MAX_REQUEST_BYTES
+from .qt_chrome import CaptionWindowMixin, install_title_bar
+from .qt_controls import ThemedComboBox
 from .qt_theme import ACTIVE_STATES, STATE_LABELS, display_time, make_symbol_icon
 
 
@@ -21,22 +22,7 @@ def label(text='', name='', wrap=False):
     return widget
 
 
-class _ParameterComboBox(QComboBox):
-    """样式化后补绘下拉指示，弹出列表仍由原生控件处理。"""
-    def paintEvent(self, event):
-        super().paintEvent(event)
-        painter = QPainter(self)
-        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-        painter.setPen(QPen(QColor('#86868B' if self.isEnabled() else '#B8B8BE'), 1.5,
-                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap, Qt.PenJoinStyle.RoundJoin))
-        arrow = QPainterPath()
-        arrow.moveTo(self.width() - 25, self.height() / 2 - 2)
-        arrow.lineTo(self.width() - 21, self.height() / 2 + 2)
-        arrow.lineTo(self.width() - 17, self.height() / 2 - 2)
-        painter.drawPath(arrow)
-
-
-class ParameterDialog(QDialog):
+class ParameterDialog(CaptionWindowMixin, QDialog):
     submitted = Signal(dict)
 
     def __init__(self, client, package, parent=None):
@@ -44,6 +30,7 @@ class ParameterDialog(QDialog):
         self.client = client
         self.package = package
         self.fields = {}
+        self.field_errors = {}
         self.closed = False
         self.busy = False
         self.online = True
@@ -54,6 +41,7 @@ class ParameterDialog(QDialog):
         self.setMinimumWidth(380)
         self.setModal(False)
         self._build()
+        install_title_bar(self)
 
     def _build(self):
         layout = QVBoxLayout(self)
@@ -80,14 +68,21 @@ class ParameterDialog(QDialog):
         fields_layout.setContentsMargins(18, 18, 18, 18)
         fields_layout.setSpacing(8)
         for name, definition in manifest.get('parameters', {}).items():
-            caption = name + (' *' if definition.get('required') else '')
+            caption = (definition.get('title') or name) + (' *' if definition.get('required') else '')
             fields_layout.addWidget(label(caption, 'fieldLabel'))
             field = self._make_field(definition)
             field.setMinimumHeight(42)
-            field.setAccessibleName(name)
+            field.setAccessibleName(definition.get('title') or name)
+            field.setToolTip(name)
             field.setObjectName('parameter_' + name)
             self.fields[name] = field
             fields_layout.addWidget(field)
+            error = label('', 'fieldError', True)
+            error.hide()
+            self.field_errors[name] = error
+            fields_layout.addWidget(error)
+            signal = field.currentIndexChanged if isinstance(field, QComboBox) else field.textChanged
+            signal.connect(lambda _value, key=name: self._field_error(key, ''))
             if definition.get('description'):
                 fields_layout.addWidget(label(definition['description'], 'hint', True))
             fields_layout.addSpacing(10)
@@ -123,7 +118,7 @@ class ParameterDialog(QDialog):
     def _make_field(definition):
         default = definition.get('default')
         if definition['type'] == 'boolean':
-            field = _ParameterComboBox()
+            field = ThemedComboBox()
             field.addItem('不指定，使用默认值', None)
             field.addItem('是', True)
             field.addItem('否', False)
@@ -138,25 +133,44 @@ class ParameterDialog(QDialog):
             field.setPlaceholderText('请输入数值')
         return field
 
+    def _field_error(self, name, message):
+        field = self.fields[name]
+        field.setProperty('invalid', bool(message))
+        field.setAccessibleDescription(message)
+        field.style().unpolish(field)
+        field.style().polish(field)
+        self.field_errors[name].setText(message)
+        self.field_errors[name].setVisible(bool(message))
+
     def parameters(self):
         values = {}
+        first_invalid = None
         for name, definition in self.package['manifest']['parameters'].items():
             field = self.fields[name]
             kind = definition['type']
-            if kind == 'boolean':
-                value = field.currentData()
-                if value is not None:
-                    values[name] = value
-                continue
-            value = field.text()
-            if kind == 'string':
-                values[name] = value
-            elif value.strip():
-                try:
-                    values[name] = int(value) if kind == 'integer' else float(value)
-                except ValueError as exc:
-                    raise ValueError(f'{name} 必须是' + ('整数' if kind == 'integer' else '数值')) from exc
-        return resolve_parameters(self.package['manifest'], values)
+            try:
+                supplied = {}
+                if kind == 'boolean':
+                    value = field.currentData()
+                    if value is not None:
+                        supplied[name] = value
+                elif kind == 'string':
+                    supplied[name] = field.text()
+                elif field.text().strip():
+                    try:
+                        supplied[name] = int(field.text()) if kind == 'integer' else float(field.text())
+                    except ValueError as exc:
+                        raise ValueError('请输入整数' if kind == 'integer' else '请输入数值') from exc
+                manifest = dict(self.package['manifest'], parameters={name: definition})
+                values.update(resolve_parameters(manifest, supplied))
+                self._field_error(name, '')
+            except ValueError as exc:
+                self._field_error(name, str(exc))
+                first_invalid = first_invalid or field
+        if first_invalid is not None:
+            first_invalid.setFocus()
+            raise ValueError('请检查标出的参数：' + next(error.text() for error in self.field_errors.values() if error.text()))
+        return values
 
     def set_online(self, online):
         self.online = online
@@ -209,7 +223,7 @@ class ParameterDialog(QDialog):
         super().done(result)
 
 
-class JobDialog(QDialog):
+class JobDialog(CaptionWindowMixin, QDialog):
     def __init__(self, client, job, parent=None):
         super().__init__(parent)
         self.client = client
@@ -227,6 +241,7 @@ class JobDialog(QDialog):
         self.resize(620, 650)
         self.setMinimumSize(460, 440)
         self._build()
+        install_title_bar(self)
         self._render_job()
         self.timer = QTimer(self)
         self.timer.setInterval(1500)

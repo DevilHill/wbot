@@ -5,6 +5,7 @@ const path = require('node:path');
 const net = require('node:net');
 const vscode = require('vscode');
 const core = require('../src/core');
+const {verifySharedElementsHost} = require('./shared-host');
 
 async function until(predicate, timeout=30000) {
   const end = Date.now()+timeout;
@@ -192,6 +193,7 @@ async function run() {
     assert.equal(api.bridge.child,null);
     await assert.rejects(core.request(base,'/api/health'));
     check('停止本扩展创建的服务');
+    await verifySharedElementsHost(vscode, check);
     report.passed = true;
   } catch (error) { report.error = error.stack; throw error; }
   finally {

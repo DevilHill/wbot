@@ -10,6 +10,8 @@ from uuid import uuid4
 
 from app.automation_package import MAX_PACKAGE_BYTES, inspect_package, resolve_parameters
 from .agent_service import AgentService, TERMINAL_STATES
+from .element_service import ElementRepositoryService
+from .assistant_releases import AssistantReleases
 from .client import AssistantClient, AssistantRejected
 from .store import OcStore, public_record as _public
 
@@ -39,6 +41,8 @@ class OcService:
         self.store = OcStore(self.state_dir / 'oc.sqlite3')
         self._lock = threading.RLock()
         self.agents = AgentService(self.store, self._lock)
+        self.elements = ElementRepositoryService(self.state_dir / 'elements.sqlite3')
+        self.releases = AssistantReleases(self.state_dir, self.store, self._lock)
 
     def import_package(self, path):
         source = Path(path)

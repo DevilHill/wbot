@@ -10,6 +10,8 @@ test('编码版入口只提供 Python 脚本及元素辅助工具', () => {
   const manifest = require('../package.json');
   const commands = manifest.contributes.commands.map(item => item.command);
   for (const name of ['newScript','runFile','debugFile','insertElement','pick']) assert.ok(commands.includes('wbot.'+name));
+  for (const name of ['sharedElements','connectSharedElements','sharedElementChanges','commitSharedElements',
+                     'requestElementMerge','sharedElementStatus','pullSharedElements']) assert.ok(commands.includes('wbot.'+name));
   for (const name of ['newFlow','openWorkbench']) assert.ok(!commands.includes('wbot.'+name));
   assert.ok(!manifest.contributes.customEditors?.length);
   assert.ok(!manifest.activationEvents.some(event => event.startsWith('onCustomEditor:')));

@@ -83,7 +83,11 @@ jobs:
           options=(-o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -i "$key")
           target="$OC_SSH_USER@$OC_SSH_HOST"
           ssh "${options[@]}" "$target" "umask 077; mkdir -p ~/wbot-oc/releases/$GITHUB_SHA"
-          scp "${options[@]}" image.tar.gz deploy/oc/compose.yml deploy/oc/activate-release.sh "$target:wbot-oc/releases/$GITHUB_SHA/"
+          sha256sum image.tar.gz > image.tar.gz.sha256
+          split -b 4M -d image.tar.gz image.part.
+          printf '%s\0' image.part.* | xargs -0 -P 6 -I '{}' scp "${options[@]}" '{}' "$target:wbot-oc/releases/$GITHUB_SHA/"
+          scp "${options[@]}" image.tar.gz.sha256 deploy/oc/compose.yml deploy/oc/activate-release.sh "$target:wbot-oc/releases/$GITHUB_SHA/"
+          ssh "${options[@]}" "$target" "cd ~/wbot-oc/releases/$GITHUB_SHA && cat image.part.* > image.tar.gz && sha256sum -c image.tar.gz.sha256 && rm -- image.part.*"
           ssh "${options[@]}" "$target" "bash ~/wbot-oc/releases/$GITHUB_SHA/activate-release.sh $GITHUB_SHA"
       - name: Check public entry points
         run: |

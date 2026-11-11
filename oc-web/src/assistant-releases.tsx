@@ -1,3 +1,4 @@
+import { PermissionButton } from './permissions';
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { Download, RefreshCw, Upload } from 'lucide-react';
 import { errorMessage, request } from './api';
@@ -39,7 +40,7 @@ export function AssistantReleases({ snapshot }: PageProps) {
 
   return <>
     <PageHeading eyebrow="ASSISTANT UPDATES" title="客户端更新" description="集中发布 Assistant 版本，让设备在任务结束后由用户确认升级。"
-      action={<button className="button primary" onClick={() => setUploading(true)}><Upload size={16} />上传新版本</button>} />
+      action={<PermissionButton permission="releases.manage" className="button primary" onClick={() => setUploading(true)}><Upload size={16} />上传新版本</PermissionButton>} />
     <div className="inset-note">上传后先保存为草稿。发布时可选择全部已批准设备或指定设备；撤回后停止提供该版本的下载和安装授权。</div>
     {error && <p className="form-error" role="alert">{error}</p>}
     <section className="panel release-panel"><div className="release-toolbar"><strong>版本目录 · {releases.length}</strong><button className="button secondary" disabled={loading} onClick={() => void refresh()}><RefreshCw size={15} />刷新</button></div>
@@ -49,7 +50,7 @@ export function AssistantReleases({ snapshot }: PageProps) {
           <td><span className={`status status-${release.published ? 'succeeded' : 'stopped'}`}><i />{release.published ? '已发布' : '草稿 / 已撤回'}</span></td>
           <td>{release.device_ids.length ? `${release.device_ids.length} 台指定设备` : '全部已批准设备'}</td>
           <td>{fileSize(release.size)}<span className="cell-subtitle">{dateTime(release.created_at)}</span></td>
-          <td><div className="release-actions"><button className="button secondary" disabled={!!withdrawing} onClick={() => setEditing(release)}>{release.published ? '发布设置' : '发布版本'}</button>{release.published && <button className="quiet-button" disabled={!!withdrawing} onClick={() => void withdraw(release)}>撤回</button>}</div></td>
+          <td><div className="release-actions"><PermissionButton permission="releases.manage" className="button secondary" disabled={!!withdrawing} onClick={() => setEditing(release)}>{release.published ? '发布设置' : '发布版本'}</PermissionButton>{release.published && <PermissionButton permission="releases.manage" className="quiet-button" disabled={!!withdrawing} onClick={() => void withdraw(release)}>撤回</PermissionButton>}</div></td>
         </tr>)}</tbody></table></div>}
     </section>
     {uploading && <ReleaseUpload onClose={() => setUploading(false)} onSaved={() => { setUploading(false); void refresh(); }} />}

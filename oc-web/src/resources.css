@@ -1,0 +1,14 @@
+.resource-fields { border: 0; padding: 0; margin: 0; min-width: 0; }
+.robot-picker { display: grid; gap: 8px; max-height: 260px; overflow: auto; }
+.robot-choice { display: flex; align-items: center; gap: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; }
+.robot-choice > span:nth-child(2) { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.robot-choice small { display: block; margin-top: 4px; color: var(--muted); }
+.robot-choice input { width: 17px; height: 17px; accent-color: var(--green); flex: none; }
+.asset-value { display: block; max-width: 280px; overflow-wrap: anywhere; white-space: pre-wrap; max-height: 100px; overflow: auto; }
+.asset-bindings { padding: 14px; border-radius: 14px; background: var(--light-green); margin: 12px 0; }
+.status-queued { color: #886311; background: #fff5d9; }
+.queue-summary { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
+.queue-summary > div { flex: 1 1 150px; padding: 18px 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; }
+.queue-summary strong { font-size: 26px; margin-right: 12px; }
+.queue-summary span { color: var(--muted); }
+.log-tools { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 12px 0; }

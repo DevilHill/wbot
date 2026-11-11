@@ -3,6 +3,7 @@ import argparse
 import json
 import logging
 import os
+import signal
 from pathlib import Path
 import subprocess
 import sys
@@ -93,12 +94,19 @@ def serve(state_dir, port=8792, web_dir=DEFAULT_WEB_DIR, *, agent_host='127.0.0.
     except RuntimeError as exc:
         raise RuntimeError('该数据目录已有后台服务，请使用独立 OC 目录或连接现有 OC') from exc
     server = None
+    service = None
     gateway = None
     gateway_thread = None
+    previous_terminate = None
     metadata_path = state_dir / 'service.json'
     try:
-        service = OcService(state_dir)
+        service = OcService(state_dir, database_url=os.environ.get('WBOT_OC_DATABASE_URL'),
+                            redis_url=os.environ.get('WBOT_OC_REDIS_URL'),
+                            namespace=os.environ.get('WBOT_OC_NAMESPACE', 'wbot_oc'))
         server = create_server(service, web_dir, port)
+        if threading.current_thread() is threading.main_thread():
+            previous_terminate = signal.signal(signal.SIGTERM,
+                lambda *_args: threading.Thread(target=server.shutdown, daemon=True).start())
         gateway = create_agent_server(service, agent_host, agent_port, agent_cert, agent_key)
         server.agent_gateway = gateway.connection_info()
         gateway_thread = threading.Thread(target=gateway.serve_forever,
@@ -115,6 +123,8 @@ def serve(state_dir, port=8792, web_dir=DEFAULT_WEB_DIR, *, agent_host='127.0.0.
     except KeyboardInterrupt:
         pass
     finally:
+        if previous_terminate is not None:
+            signal.signal(signal.SIGTERM, previous_terminate)
         if gateway is not None:
             if gateway_thread is not None:
                 gateway.shutdown()
@@ -122,6 +132,8 @@ def serve(state_dir, port=8792, web_dir=DEFAULT_WEB_DIR, *, agent_host='127.0.0.
             gateway.server_close()
         if server is not None:
             server.server_close()
+        if service is not None:
+            service.close()
         metadata_path.unlink(missing_ok=True)
         lock.__exit__()
 

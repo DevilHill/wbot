@@ -9,6 +9,7 @@ from .store import public_record
 
 
 TERMINAL_STATES = {'succeeded', 'failed', 'stopped', 'interrupted'}
+RESERVED_STATES = {'dispatching', 'preparing', 'running', 'stopping', 'unknown'}
 REPORT_STATES = {'preparing', 'running', 'stopping'} | TERMINAL_STATES
 MAX_LOG_BYTES = 512 * 1024
 MAX_RESULT_BYTES = 1024 * 1024
@@ -20,9 +21,10 @@ class AgentDenied(PermissionError):
 
 
 class AgentService:
-    def __init__(self, store, lock):
+    def __init__(self, store, lock, runtime=None):
         self.store = store
         self.lock = lock
+        self.runtime = runtime
 
     def enroll(self, body):
         if set(body) != {'device_id', 'name', 'secret'}:
@@ -73,19 +75,28 @@ class AgentService:
         if device.get('binding_state') != 'approved':
             raise AgentDenied('设备绑定尚未批准或已失效')
 
-    def refresh(self, device, heartbeat=False, busy=None):
+    def refresh(self, device, heartbeat=False, busy=None, persist=False):
+        cached = self.runtime.read(device['id']) if self.runtime else None
+        if cached and cached['last_seen'] >= (device['last_seen'] or 0):
+            device['last_seen'] = cached['last_seen']
+            device['_reported_busy'] = cached['busy']
         if heartbeat:
             device['last_seen'] = time.time()
         if busy is not None:
             device['_reported_busy'] = busy
-        active = [job for job in self.store.list('jobs') if job['device_id'] == device['id']
-                  and job['state'] not in TERMINAL_STATES]
+        active = self.store.jobs_in_states(RESERVED_STATES, device['id'])
         device['active_jobs'] = max(len(active), int(device.get('_reported_busy', False)))
         online = (device['binding_state'] == 'approved' and device['last_seen'] is not None
                   and time.time() - device['last_seen'] < HEARTBEAT_TIMEOUT)
         device['status'] = ('busy' if device['active_jobs'] else 'online') if online else 'offline'
         device['error'] = ''
-        self.store.replace('devices', device)
+        saved_at = cached['saved_at'] if cached else 0
+        save_due = persist or time.time() - saved_at >= 15
+        cached_ok = self.runtime and device['last_seen'] is not None and self.runtime.write(
+            device['id'], device['last_seen'], device.get('_reported_busy', False),
+            time.time() if save_due else saved_at)
+        if not cached_ok or save_due:
+            self.store.replace('devices', device)
         return public_record(device)
 
     def status(self, device):
@@ -115,7 +126,7 @@ class AgentService:
                         job.update(state='failed', error='任务领取前设备绑定已被撤销',
                                    finished_at=time.time(), _log_complete=True)
                         self.store.replace('jobs', job)
-            return self.refresh(device)
+            return self.refresh(device, persist=True)
 
     def owned_job(self, device, identifier):
         job = self.store.get('jobs', identifier)
@@ -134,8 +145,7 @@ class AgentService:
             device = self.store.get('devices', device['id'])
             if active_id is not None:
                 self.owned_job(device, active_id)
-            jobs = [job for job in reversed(self.store.list('jobs'))
-                    if job['device_id'] == device['id'] and job['state'] not in TERMINAL_STATES]
+            jobs = list(reversed(self.store.jobs_in_states(RESERVED_STATES, device['id'])))
             stops = [job['id'] for job in jobs if job.get('_agent_claimed') and job.get('_stop_requested')]
             selected = None
             if device['binding_state'] == 'approved':

@@ -27,6 +27,15 @@ export type AgentGateway = { host: string; port: number; scheme: string; url: st
 export type Process = {
   id: string; name: string; description: string; package_id: string; device_id: string;
   defaults: Parameters; enabled: boolean; created_at: number; updated_at: number;
+  environment_id?: string; asset_bindings?: Record<string, string>;
+};
+export type Environment = {
+  id: string; name: string; description: string; robot_ids: string[]; enabled: boolean;
+  created_at: number; updated_at: number;
+};
+export type Asset = {
+  id: string; name: string; description: string; type: ParameterDefinition['type'];
+  value: ParameterValue; revision: number; created_at: number; updated_at: number;
 };
 export type Job = {
   id: string; process_id: string; process_name: string; package_id: string;
@@ -34,11 +43,16 @@ export type Job = {
   created_at: number; started_at: number | null; finished_at: number | null;
   assistant_job_id: string | null; result: unknown; error: string;
   sync_error: string; last_synced_at: number | null;
+  environment_id?: string; environment_name?: string; priority?: number; queue_reason?: string;
+  asset_snapshots?: Record<string, { id: string; name: string; revision: number }>;
 };
 export type Snapshot = {
   packages: Package[]; devices: Device[]; processes: Process[]; jobs: Job[];
+  environments?: Environment[]; assets?: Asset[];
   meta?: { mode: string; organization: string };
 };
-export type Session = { token: string; mode: string; organization: string; default_assistant_dir: string; agent_gateway?: AgentGateway | null };
+export type User = { id: string; username: string; display_name: string; role: string; enabled: boolean; must_change_password: boolean; created_at: number; updated_at: number };
+export type Role = { id: string; name: string; permissions: string[] };
+export type Session = { token: string; mode: string; organization: string; default_assistant_dir: string; agent_gateway?: AgentGateway | null; user?: User; permissions?: string[] };
 export type JobLog = { log: string; cached: boolean; sync_error: string };
-export type Section = 'overview' | 'processes' | 'packages' | 'elements' | 'devices' | 'jobs' | 'updates';
+export type Section = 'overview' | 'processes' | 'packages' | 'elements' | 'devices' | 'jobs' | 'updates' | 'environments' | 'assets' | 'queue' | 'users';

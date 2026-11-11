@@ -1,0 +1,5 @@
+# Server-only dependencies; no desktop Qt or WebView runtime.
+lxml>=5.0,<7
+psycopg[binary]==3.3.8
+psycopg-pool==3.3.3
+redis==8.1.0

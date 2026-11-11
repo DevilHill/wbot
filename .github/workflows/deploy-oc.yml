@@ -1,0 +1,91 @@
+name: Test and deploy OC
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oc-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    environment:
+      name: production
+      url: https://rpa.marswei.fun
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_USER: wbot_test
+          POSTGRES_DB: wbot_test
+          POSTGRES_PASSWORD: isolated-ci-test-password
+        ports: ['15432:5432']
+        options: >-
+          --health-cmd "pg_isready -U wbot_test -d wbot_test"
+          --health-interval 5s --health-timeout 3s --health-retries 12
+      redis:
+        image: redis:8-alpine
+        ports: ['16379:6379']
+        options: --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 3s --health-retries 12
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.13'
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: oc-web/package-lock.json
+      - name: Test OC and build management UI
+        env:
+          WBOT_TEST_DATABASE_URL: postgresql://wbot_test:isolated-ci-test-password@127.0.0.1:15432/wbot_test
+          WBOT_TEST_REDIS_URL: redis://127.0.0.1:16379/0
+        run: |
+          python -m pip install -r requirements-oc.txt
+          python -m unittest tests.test_oc_auth tests.test_oc_service tests.test_oc_server tests.test_oc_agent_server tests.test_oc_resources_queue tests.test_oc_elements tests.test_oc_postgres tests.test_assistant_releases -v
+          npm --prefix oc-web ci
+          npm --prefix oc-web test
+          npm --prefix oc-web run build
+          for script in deploy/oc/*.sh; do bash -n "$script"; done
+      - name: Build deployment image
+        run: |
+          docker build --build-arg WEB_SOURCE=web-prebuilt -f deploy/oc/Dockerfile -t "wbot-oc:$GITHUB_SHA" .
+          docker save "wbot-oc:$GITHUB_SHA" | gzip -1 > image.tar.gz
+      - name: Deploy over verified SSH
+        env:
+          OC_SSH_KEY: ${{ secrets.OC_SSH_KEY }}
+          OC_SSH_KNOWN_HOSTS: ${{ secrets.OC_SSH_KNOWN_HOSTS }}
+          OC_SSH_HOST: ${{ secrets.OC_SSH_HOST }}
+          OC_SSH_USER: ${{ secrets.OC_SSH_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          test -n "$OC_SSH_KEY" && test -n "$OC_SSH_KNOWN_HOSTS"
+          [[ "$OC_SSH_HOST" =~ ^[a-zA-Z0-9.-]+$ ]]
+          [[ "$OC_SSH_USER" =~ ^[a-z_][a-z0-9_-]*$ ]]
+          key="$RUNNER_TEMP/oc-deploy-key"
+          known="$RUNNER_TEMP/oc-known-hosts"
+          trap 'rm -f -- "$key" "$known"' EXIT
+          printf '%s\n' "$OC_SSH_KEY" > "$key"
+          printf '%s\n' "$OC_SSH_KNOWN_HOSTS" > "$known"
+          options=(-o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -i "$key")
+          target="$OC_SSH_USER@$OC_SSH_HOST"
+          ssh "${options[@]}" "$target" "umask 077; mkdir -p ~/wbot-oc/releases/$GITHUB_SHA"
+          scp "${options[@]}" image.tar.gz deploy/oc/compose.yml deploy/oc/activate-release.sh "$target:wbot-oc/releases/$GITHUB_SHA/"
+          ssh "${options[@]}" "$target" "bash ~/wbot-oc/releases/$GITHUB_SHA/activate-release.sh $GITHUB_SHA"
+      - name: Check public entry points
+        run: |
+          curl --fail --silent --show-error --retry 3 https://rpa.marswei.fun/ > /dev/null
+          curl --fail --silent --show-error --retry 3 https://rpa.marswei.fun/api/agent/health
+          test "$(curl --silent --show-error -o /dev/null -w '%{http_code}' https://rpa.marswei.fun/api/oc/session)" = 401

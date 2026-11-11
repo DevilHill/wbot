@@ -1,0 +1,16 @@
+{
+    email {$ACME_EMAIL}
+    admin 127.0.0.1:2019
+}
+
+{$OC_AGENT_DOMAIN} {
+    request_body {
+        max_size 8MB
+    }
+    handle /api/agent/* {
+        reverse_proxy 127.0.0.1:18893
+    }
+    handle {
+        respond "Not found" 404
+    }
+}

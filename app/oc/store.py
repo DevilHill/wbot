@@ -4,7 +4,7 @@ import json
 import sqlite3
 
 
-TABLES = {'packages', 'devices', 'processes', 'jobs', 'assistant_releases'}
+TABLES = {'packages', 'devices', 'processes', 'jobs', 'assistant_releases', 'environments', 'assets', 'users'}
 
 
 def public_record(record):
@@ -15,7 +15,7 @@ class OcStore:
     def __init__(self, path):
         self.path = path
         with self.connection() as database:
-            for table in ('packages', 'devices', 'processes', 'assistant_releases'):
+            for table in sorted(TABLES - {'jobs'}):
                 database.execute(f'CREATE TABLE IF NOT EXISTS {table} (id TEXT PRIMARY KEY, payload TEXT NOT NULL)')
             database.execute('''CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY, request_id TEXT NOT NULL UNIQUE, payload TEXT NOT NULL)''')
@@ -60,6 +60,17 @@ class OcStore:
             else:
                 database.execute(f'INSERT INTO {table} VALUES (?, ?)', (record['id'], payload))
 
+    def jobs_in_states(self, states, device_id=None):
+        placeholders = ','.join('?' for _ in states)
+        query = f"SELECT payload FROM jobs WHERE json_extract(payload,'$.state') IN ({placeholders})"
+        values = list(states)
+        if device_id is not None:
+            query += " AND json_extract(payload,'$.device_id')=?"
+            values.append(device_id)
+        with self.connection() as database:
+            rows = database.execute(query + ' ORDER BY rowid DESC', values).fetchall()
+        return [json.loads(row['payload']) for row in rows]
+
     def replace(self, table, record):
         table = self._table(table)
         payload = json.dumps(record, ensure_ascii=False, allow_nan=False)
@@ -72,6 +83,11 @@ class OcStore:
         with self.connection() as database:
             row = database.execute('SELECT payload FROM jobs WHERE request_id=?', (request_id,)).fetchone()
         return json.loads(row['payload']) if row else None
+
+    def delete(self, table, identifier):
+        table = self._table(table)
+        with self.connection() as database:
+            database.execute(f'DELETE FROM {table} WHERE id=?', (identifier,))
 
     def save_log(self, job_id, content):
         with self.connection() as database:

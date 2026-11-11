@@ -4,6 +4,7 @@ from app.assistant_release import MAX_RELEASE_BYTES
 import json
 import logging
 import mimetypes
+import os
 from pathlib import Path
 import secrets
 import tempfile
@@ -11,6 +12,8 @@ import threading
 from urllib.parse import unquote, urlsplit
 
 from .element_routes import admin_elements
+from .auth import AuthError
+from . import auth_http
 
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
@@ -47,6 +50,12 @@ class OcServer(ThreadingHTTPServer):
     def origin(self):
         return f'http://127.0.0.1:{self.server_port}'
 
+    def service_actions(self):
+        try:
+            self.service.queue.dispatch()
+        except Exception:
+            logging.exception('运行队列调度失败，将在下一轮重试')
+
 
 class OcHandler(BaseHTTPRequestHandler):
     server: OcServer
@@ -65,6 +74,9 @@ class OcHandler(BaseHTTPRequestHandler):
         self.send_header('Cache-Control', 'no-store')
         self.send_header('X-Content-Type-Options', 'nosniff')
         self.send_header('Referrer-Policy', 'no-referrer')
+        if getattr(self, 'response_cookie', None):
+            self.send_header('Set-Cookie', self.response_cookie)
+            self.response_cookie = None
         self.send_header('Content-Security-Policy',
                          "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; "
                          "frame-ancestors 'none'; object-src 'none'; base-uri 'self'")
@@ -83,6 +95,8 @@ class OcHandler(BaseHTTPRequestHandler):
                 or self.headers.get('Sec-Fetch-Site', 'none') not in ('none', 'same-origin')):
             self._json(403, {'error': '仅允许本机同源访问 OC'})
             return False
+        if getattr(self.server.service, 'auth', None) and self.server.service.auth.enabled:
+            return auth_http.authorize(self, path)
         if path.startswith('/api/') and path != '/api/oc/session':
             token = self.headers.get('X-WBot-Token', '').encode('utf-8')
             if not secrets.compare_digest(token, self.server.token.encode('ascii')):
@@ -143,9 +157,12 @@ class OcHandler(BaseHTTPRequestHandler):
 
     def _handle(self, method):
         path = urlsplit(self.path).path
-        if not self._authorized(path):
-            return
         try:
+            if not self._authorized(path):
+                return
+            if (getattr(self.server.service, 'auth', None) and self.server.service.auth.enabled
+                    and auth_http.route(self, method, path)):
+                return
             if method == 'GET':
                 self._get(path)
             elif path == '/api/oc/packages' and method == 'POST':
@@ -156,6 +173,8 @@ class OcHandler(BaseHTTPRequestHandler):
                 self._mutate(method, path, self._read_json())
         except (BrokenPipeError, ConnectionResetError):
             return
+        except AuthError as exc:
+            self._json(exc.status, {'error': str(exc)})
         except (KeyError, FileNotFoundError):
             self._json(404, {'error': '找不到指定的发布包、流程、设备或作业'})
         except FileExistsError as exc:
@@ -170,12 +189,22 @@ class OcHandler(BaseHTTPRequestHandler):
             logging.exception('OC 请求处理失败')
             self._json(500, {'error': 'OC 服务发生错误，请查看 service.log'})
 
+    def session_payload(self, identity=None):
+        from .auth import PERMISSIONS
+        result = {'token': self.server.token, 'mode': 'local', 'organization': '默认组织',
+                  'default_assistant_dir': str(DEFAULT_ASSISTANT_DIR), 'agent_gateway': self.server.agent_gateway,
+                  'permissions': list(PERMISSIONS)}
+        if identity:
+            result.update(identity, mode='account')
+        public_url = os.environ.get('WBOT_OC_PUBLIC_URL')
+        if public_url and result['agent_gateway']:
+            result['agent_gateway'] = dict(result['agent_gateway'], url=public_url, public_host_required=False)
+        return result
+
     def _get(self, path):
         service = self.server.service
         if path == '/api/oc/session':
-            self._json(200, {'token': self.server.token, 'mode': 'local', 'organization': '默认组织',
-                             'default_assistant_dir': str(DEFAULT_ASSISTANT_DIR),
-                             'agent_gateway': self.server.agent_gateway})
+            self._json(200, self.session_payload(getattr(self, 'identity', None)))
         elif path == '/api/oc/health':
             self._json(200, {'product': 'wbot-oc', 'ok': True, 'mode': 'local'})
         elif path == '/api/oc/state':
@@ -183,6 +212,10 @@ class OcHandler(BaseHTTPRequestHandler):
             self._json(200, dict(snapshot, meta={'mode': 'local', 'organization': '默认组织'}))
         elif path == '/api/oc/assistant-releases':
             self._json(200, {'items': service.releases.list()})
+        elif path in ('/api/oc/environments', '/api/oc/assets'):
+            self._json(200, {'items': service.store.list(path.rsplit('/', 1)[1])})
+        elif path == '/api/oc/robots':
+            self._json(200, {'items': service.snapshot()['robots']})
         elif path.startswith('/api/oc/elements/'):
             self._json(*admin_elements(service.elements, 'GET', path))
         elif path.startswith('/api/oc/jobs/'):
@@ -211,7 +244,23 @@ class OcHandler(BaseHTTPRequestHandler):
             threading.Thread(target=self.server.shutdown, daemon=True).start()
         else:
             parts = path.strip('/').split('/')
-            if (len(parts) == 5 and parts[:3] == ['api', 'oc', 'devices'] and method == 'POST'
+            if (len(parts) in (3, 4, 5) and parts[:2] == ['api', 'oc']
+                    and parts[2] in ('environments', 'assets')):
+                table = parts[2]
+                if len(parts) == 5 and parts[4] == 'delete' and method == 'POST':
+                    if body:
+                        raise ValueError('删除请求必须为空对象')
+                    service.resources.delete(table, parts[3])
+                    self._json(200, {'ok': True})
+                elif (len(parts) == 3 and method == 'POST') or (len(parts) == 4 and method == 'PATCH'):
+                    save = service.resources.save_environment if table == 'environments' else service.resources.save_asset
+                    self._json(201 if len(parts) == 3 else 200, {'item': save(parts[3] if len(parts) == 4 else None, body)})
+                else:
+                    self._json(404, {'error': '接口不存在'})
+            elif (len(parts) == 5 and parts[:3] == ['api', 'oc', 'processes']
+                  and parts[4] == 'enqueue' and method == 'POST'):
+                self._json(201, {'job': service.queue.enqueue(parts[3], body)})
+            elif (len(parts) == 5 and parts[:3] == ['api', 'oc', 'devices'] and method == 'POST'
                     and parts[4] in ('approve', 'reject', 'revoke')):
                 if body:
                     raise ValueError('设备审批请求必须为空对象')

@@ -1,0 +1,31 @@
+.auth-shell { min-height: 100dvh; display: grid; grid-template-columns: 1fr 1fr; background: #f7f9fc; }
+.auth-story { margin: 20px; padding: 40px; border-radius: 28px; background: linear-gradient(145deg, #eff5ff, #e4edfa 58%, #eaf6f3); display: flex; flex-direction: column; position: relative; overflow: hidden; }
+.auth-story-copy { margin: auto 0; padding: 70px 10px 25px; }
+.auth-story h1 { font-size: clamp(30px, 3.2vw, 50px); font-weight: 650; line-height: 1.45; letter-spacing: -.04em; margin: 18px 0; }
+.auth-story p { line-height: 1.9; color: #50617a; font-size: 15px; }
+.auth-story-footer { display: flex; gap: 9px; align-items: center; color: #5d708b; font-size: 12px; }
+.auth-orbit { height: 160px; display: flex; gap: 24px; align-items: center; justify-content: center; }
+.auth-orbit strong { height: 68px; width: 68px; border-radius: 22px; background: #3575df; color: white; display: grid; place-items: center; font-size: 34px; box-shadow: 0 18px 40px #3b78df30; }
+.orbit-node { padding: 14px 20px; border: 1px solid #ffffff; border-radius: 16px; background: #ffffff91; color: #526985; font-size: 13px; }
+.auth-form-side { display: flex; align-items: center; justify-content: center; flex-direction: column; padding: 40px 28px; }
+.auth-card { width: min(100%, 380px); display: flex; flex-direction: column; gap: 19px; }
+.auth-symbol { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 17px; background: #e9f0fc; color: #3c71cd; margin-bottom: 8px; }
+.auth-card h2 { margin: -7px 0 -10px; font-size: 29px; letter-spacing: -.03em; }
+.auth-card > p { color: #6b778b; line-height: 1.7; font-size: 13px; margin: 0 0 7px; }
+.password-input { display: flex; align-items: center; position: relative; }
+.password-input input { padding-right: 44px; width: 100%; }
+.password-input button { position: absolute; right: 7px; }
+.auth-submit { justify-content: center; min-height: 46px; width: 100%; border-radius: 12px; }
+.auth-card .auth-help { font-size: 12px; text-align: center; }
+.auth-notice { color: #18674a; background: #e9f7ef; padding: 12px; border-radius: 10px; font-size: 13px; }
+.auth-copyright { color: #788599; font-size: 11px; margin-top: 55px; }
+.account-actions { display: flex; gap: 6px; padding: 0 18px 16px; flex-wrap: wrap; }
+.sidebar .brand, .sidebar .workspace, .sidebar .nav-caption, .account-actions { flex-shrink: 0; }
+@media (max-height: 850px) { .sidebar .preview-card { display: none; } }
+.role-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 15px; margin-bottom: 24px; }
+.role-card { padding: 20px; border: 1px solid var(--line); background: white; border-radius: 16px; }
+.role-card h3 { margin: 10px 0; font-size: 14px; }
+.role-card ul { padding-left: 17px; color: var(--muted); font-size: 12px; line-height: 2; margin-bottom: 0; }
+@media (max-width: 1050px) { .role-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .auth-shell { grid-template-columns: 1fr; } .auth-story { display: none; } .auth-form-side { padding: 45px 24px; } }
+@media (max-width: 480px) { .role-grid { grid-template-columns: 1fr; } }

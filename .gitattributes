@@ -1,2 +1,4 @@
 # 固定版本的第三方资源保持原始字节，不对压缩代码生成逐行 diff。
 app/web/vendor/monaco/** -text -diff linguist-vendored
+*.sh text eol=lf
+*.yml text eol=lf

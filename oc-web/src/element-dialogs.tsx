@@ -1,3 +1,4 @@
+import { PermissionButton } from './permissions';
 import { useEffect, useRef, useState } from 'react';
 import { History, ShieldCheck } from 'lucide-react';
 import { Dialog, FormFooter } from './components';
@@ -73,7 +74,7 @@ export function ElementCommitDialog({ repositoryId, commitId, expectedHead, onCl
         <p className="small-label">版本 ID <code>{commit.id}</code></p>
         {commit.restored_from && <p className="inset-note">恢复自版本 <code>{commit.restored_from}</code></p>}
         <ElementCatalog items={commit.items} />
-        {commit.id === expectedHead ? <p className="inset-note">这是当前主分支版本。</p> : !restoring ? <button className="button secondary" onClick={() => setRestoring(true)}><History size={15} />将主分支恢复到此版本</button> : <form className="element-restore-form" onSubmit={event => { event.preventDefault(); void restore(); }}>
+        {commit.id === expectedHead ? <p className="inset-note">这是当前主分支版本。</p> : !restoring ? <PermissionButton permission="elements.manage" className="button secondary" onClick={() => setRestoring(true)}><History size={15} />将主分支恢复到此版本</PermissionButton> : <form className="element-restore-form" onSubmit={event => { event.preventDefault(); void restore(); }}>
           <strong>确认恢复主分支</strong><p>恢复会生成一条新提交，保留原有历史。其他开发者拉取后才会使用这个版本，已打包的自动化不受影响。</p>
           <label className="field"><span>恢复原因</span><input required maxLength={2000} value={message} disabled={busy} onChange={event => setMessage(event.target.value)} placeholder="例如新 XPath 在旧版页面失效，恢复上一个可用版本" /></label>
           <div className="row-actions"><button type="button" className="button secondary" disabled={busy} onClick={() => setRestoring(false)}>取消恢复</button><button type="submit" className="button primary" disabled={busy || !message.trim()}>{busy ? '正在恢复…' : '确认恢复并创建提交'}</button></div>

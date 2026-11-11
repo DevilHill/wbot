@@ -13,6 +13,10 @@ class PreviewService:
     def __init__(self):
         self.imported = None
         self.called = []
+        self.queue = self
+
+    def dispatch(self):
+        pass
 
     def snapshot(self):
         return {'packages': [], 'processes': [], 'devices': [], 'jobs': []}

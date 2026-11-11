@@ -84,6 +84,29 @@ class OcAgentServerTests(unittest.TestCase):
         return dict({'state': state, 'sequence': sequence, 'assistant_job_id': 'local-job',
                      'started_at': 1.0, 'finished_at': None, 'result': None, 'error': '', 'log': '真实日志'}, **updates)
 
+    def test_resource_admin_routes_and_queue_authentication(self):
+        identity, robot = self.enroll()
+        self.approve(identity)
+        process, _ = self.deploy(identity)
+        status, _, _ = self.request('/api/oc/assets', {'name': '普通配置', 'type': 'string', 'value': '正文'},
+                                    admin=True, headers={'X-WBot-Token': ''})
+        self.assertEqual(status, 403)
+        status, asset, _ = self.request('/api/oc/assets', {'name': '普通配置', 'type': 'string', 'value': '正文'}, admin=True)
+        self.assertEqual(status, 201, asset)
+        status, environment, _ = self.request('/api/oc/environments', {'name': '财务', 'robot_ids': [robot['id']]}, admin=True)
+        self.assertEqual(status, 201, environment)
+        status, body, _ = self.request('/api/oc/processes/' + process['id'] + '/enqueue',
+                                       {'request_id': 'http-queue', 'priority': 90}, admin=True)
+        self.assertEqual(status, 201, body)
+        self.assertEqual(body['job']['state'], 'queued')
+        status, robots, _ = self.request('/api/oc/robots', admin=True)
+        self.assertEqual(status, 200)
+        self.assertNotIn('_secret_hash', str(robots))
+        status, _, _ = self.request('/api/agent/assets', credentials=identity)
+        self.assertEqual(status, 404)
+        status, _, _ = self.request('/api/oc/assets/' + asset['item']['id'] + '/delete', {}, admin=True)
+        self.assertEqual(status, 200)
+
     def test_gateway_exposes_no_admin_session_static_or_browser_origin(self):
         status, health, headers = self.request('/api/agent/health')
         self.assertEqual(status, 200)

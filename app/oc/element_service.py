@@ -44,8 +44,8 @@ def _expect(actual, expected, label):
 
 
 class ElementRepositoryService:
-    def __init__(self, path):
-        self.store = ElementStore(path)
+    def __init__(self, path=None, *, store=None):
+        self.store = store if store is not None else ElementStore(path)
 
     def _mutate(self, actor, action, targets, body, operation):
         scope = actor['kind'] + ':' + actor['id']

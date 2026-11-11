@@ -5,11 +5,12 @@ import { createServer } from 'vite';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
-let server, Devices, ProcessDialog, RunDialog;
+let server, Devices, ProcessDialog, RunDialog, IdentityContext;
 before(async () => {
   server = await createServer({ root: resolve(import.meta.dirname, '..'), configFile: false, server: { middlewareMode: true }, esbuild: { jsx: 'automatic' }, logLevel: 'silent' });
   ({ Devices } = await server.ssrLoadModule('/src/device-page.tsx'));
   ({ ProcessDialog, RunDialog } = await server.ssrLoadModule('/src/forms.tsx'));
+  ({ IdentityContext } = await server.ssrLoadModule('/src/permissions.tsx'));
 });
 after(async () => { await server?.close(); });
 
@@ -23,7 +24,7 @@ test('设备页展示审批核验与绑定状态，不渲染设备凭据', () =>
   state.devices[0].device_secret = 'secret-must-never-be-rendered';
   state.devices[1].maintenance = true;
   state.devices[1].status = 'offline';
-  const markup = renderToStaticMarkup(createElement(Devices, { snapshot: state, actions, session: { agent_gateway: { host: '0.0.0.0', port: 8793, url: 'http://0.0.0.0:8793', public_host_required: true } } }));
+  const markup = renderToStaticMarkup(createElement(IdentityContext.Provider, { value: { mode: 'account', permissions: ['read', 'robots.manage'] } }, createElement(Devices, { snapshot: state, actions, session: { agent_gateway: { host: '0.0.0.0', port: 8793, url: 'http://0.0.0.0:8793', public_host_required: true } } })));
   assert.match(markup, /123456/);
   assert.match(markup, /批准 pending-device 绑定/);
   assert.match(markup, /拒绝 pending-device 绑定/);
@@ -37,6 +38,12 @@ test('设备页展示审批核验与绑定状态，不渲染设备凭据', () =>
   assert.match(markup, /这台 OC 电脑可访问的 IP 或域名/);
   assert.doesNotMatch(markup, /secret-must-never-be-rendered/);
   assert.doesNotMatch(markup, /href="http:\/\/0\.0\.0\.0/);
+});
+
+test('只读角色可查看设备状态，但不显示审批和维护操作', () => {
+  const markup = renderToStaticMarkup(createElement(IdentityContext.Provider, { value: { mode: 'account', permissions: ['read'] } }, createElement(Devices, { snapshot: snapshot(), actions })));
+  assert.match(markup, /pending-device/);
+  assert.doesNotMatch(markup, /批准 pending-device 绑定|拒绝 pending-device 绑定|设为维护|撤销绑定<\/button>/);
 });
 
 test('部署表单只提供已批准远程设备与旧本机设备', () => {

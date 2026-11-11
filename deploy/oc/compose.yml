@@ -1,0 +1,93 @@
+name: wbot-oc
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wbot
+      POSTGRES_DB: wbot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?configure database password}
+    ports:
+      - "127.0.0.1:25432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wbot -d wbot"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?configure Redis password}
+    command: ["sh", "-c", 'exec redis-server --requirepass "$$REDIS_PASSWORD" --maxmemory 128mb --maxmemory-policy allkeys-lru --save "" --appendonly no']
+    ports:
+      - "127.0.0.1:26379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", 'REDISCLI_AUTH="$$REDIS_PASSWORD" redis-cli ping | grep -q PONG']
+      interval: 10s
+      timeout: 3s
+      retries: 12
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  oc:
+    stop_grace_period: 30s
+    build:
+      context: ../..
+      dockerfile: deploy/oc/Dockerfile
+    image: ${OC_IMAGE:-wbot-oc:local}
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      WBOT_OC_DATABASE_URL: postgresql://wbot:${POSTGRES_PASSWORD}@127.0.0.1:25432/wbot
+      WBOT_OC_REDIS_URL: redis://:${REDIS_PASSWORD}@127.0.0.1:26379/0
+      WBOT_OC_AUTH_REQUIRED: "1"
+      WBOT_OC_SECURE_COOKIE: "1"
+      WBOT_OC_PUBLIC_URL: https://rpa.marswei.fun
+    volumes:
+      - oc-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "from app.oc.__main__ import service_status; import sys; sys.exit(not service_status('/data')['running'])"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+  gateway:
+    profiles: [standalone-gateway]
+    image: caddy:2-alpine
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      OC_AGENT_DOMAIN: ${OC_AGENT_DOMAIN:-robot.example.invalid}
+      ACME_EMAIL: ${ACME_EMAIL:-admin@example.invalid}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      oc: {condition: service_healthy}
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+volumes:
+  postgres-data:
+  oc-data:
+  caddy-data:
+  caddy-config:

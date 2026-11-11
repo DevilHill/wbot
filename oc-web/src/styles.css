@@ -207,7 +207,10 @@ code,.mono {
 .sidebar nav {
   display:flex;
   flex-direction:column;
-  gap:5px
+  gap:5px;
+  min-height:0;
+  overflow-y:auto;
+  flex:1
 }
 
 .sidebar nav a {
@@ -242,7 +245,8 @@ code,.mono {
 
 .sidebar-bottom {
   margin-top:auto;
-  padding-top:28px
+  padding-top:18px;
+  flex-shrink:0
 }
 
 .preview-card {
@@ -792,6 +796,7 @@ code,.mono {
 }
 
 .table-scroll {
+  position:relative;
   overflow:auto
 }
 

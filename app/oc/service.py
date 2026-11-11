@@ -14,15 +14,11 @@ from .element_service import ElementRepositoryService
 from .assistant_releases import AssistantReleases
 from .client import AssistantClient, AssistantRejected
 from .store import OcStore, public_record as _public
+from .resources import Resources, text as _text
+from .job_queue import JobQueue
 
 
 ACTIVE_STATES = {'preparing', 'running', 'stopping'}
-
-
-def _text(value, label, limit=120):
-    if not isinstance(value, str) or not value.strip() or len(value) > limit:
-        raise ValueError(f'{label} 必须为 1–{limit} 字符的非空文本')
-    return value.strip()
 
 
 def _fingerprint(path):
@@ -34,15 +30,36 @@ def _fingerprint(path):
 
 
 class OcService:
-    def __init__(self, state_dir):
+    def __init__(self, state_dir, *, database_url=None, redis_url=None, namespace='wbot_oc'):
         self.state_dir = Path(state_dir).resolve()
         self.packages_dir = self.state_dir / 'packages'
         self.packages_dir.mkdir(parents=True, exist_ok=True)
-        self.store = OcStore(self.state_dir / 'oc.sqlite3')
+        self.database = None
+        self.runtime = None
         self._lock = threading.RLock()
-        self.agents = AgentService(self.store, self._lock)
-        self.elements = ElementRepositoryService(self.state_dir / 'elements.sqlite3')
+        if database_url:
+            from .postgres import PostgresDatabase, PostgresElementStore, PostgresOcStore
+            self.database = PostgresDatabase(database_url, namespace)
+            self.store = PostgresOcStore(self.database)
+            self.elements = ElementRepositoryService(store=PostgresElementStore(self.database))
+        else:
+            self.store = OcStore(self.state_dir / 'oc.sqlite3')
+            self.elements = ElementRepositoryService(self.state_dir / 'elements.sqlite3')
+        if redis_url:
+            from .runtime_cache import RobotRuntimeCache
+            self.runtime = RobotRuntimeCache(redis_url, namespace)
+        self.agents = AgentService(self.store, self._lock, runtime=self.runtime)
         self.releases = AssistantReleases(self.state_dir, self.store, self._lock)
+        self.resources = Resources(self.store, self._lock)
+        self.queue = JobQueue(self)
+        from .auth import AuthService
+        self.auth = AuthService(self.store, self._lock)
+
+    def close(self):
+        if self.runtime is not None:
+            self.runtime.close()
+        if self.database is not None:
+            self.database.close()
 
     def import_package(self, path):
         source = Path(path)
@@ -92,9 +109,9 @@ class OcService:
             self.store.insert('devices', device)
             return self._refresh_device(device)
 
-    def _refresh_device(self, device):
+    def _refresh_device(self, device, persist=False):
         if device.get('transport') == 'agent':
-            return self.agents.refresh(device)
+            return self.agents.refresh(device, persist=persist)
         device.setdefault('transport', 'local')
         device.setdefault('binding_state', 'approved')
         try:
@@ -117,10 +134,11 @@ class OcService:
         with self._lock:
             device = self.store.get('devices', identifier)
             device['maintenance'] = maintenance
-            return self._refresh_device(device)
+            return self._refresh_device(device, persist=True)
 
     def _process_values(self, body):
-        allowed = {'name', 'description', 'package_id', 'device_id', 'defaults', 'enabled'}
+        allowed = {'name', 'description', 'package_id', 'device_id', 'environment_id',
+                   'defaults', 'enabled', 'asset_bindings'}
         if not isinstance(body, dict) or body.keys() - allowed:
             raise ValueError('流程包含不支持的字段')
         name = _text(body.get('name'), '流程名称')
@@ -128,11 +146,20 @@ class OcService:
         if not isinstance(description, str) or len(description) > 2000:
             raise ValueError('流程说明必须是最多 2000 字符的文本')
         package_id = _text(body.get('package_id'), '发布包标识', 200)
-        device_id = _text(body.get('device_id'), '设备标识')
         package = self.store.get('packages', package_id)
-        device = self.store.get('devices', device_id)
-        if device.get('transport') == 'agent' and device['binding_state'] != 'approved':
-            raise RuntimeError('只能选择已批准的远程设备')
+        device_id, environment_id = body.get('device_id', ''), body.get('environment_id', '')
+        if not isinstance(device_id, str) or not isinstance(environment_id, str) or bool(device_id) == bool(environment_id):
+            raise ValueError('必须选择一个 Robot 或一个 Environment')
+        if environment_id:
+            environment_id = _text(environment_id, 'Environment ID')
+            self.store.get('environments', environment_id)
+        else:
+            device_id = _text(device_id, 'Robot ID')
+            device = self.store.get('devices', device_id)
+            if device.get('binding_state', 'approved') != 'approved':
+                raise RuntimeError('只能选择已批准的 Robot')
+        bindings = body.get('asset_bindings', {})
+        self.resources.bindings(package['manifest'], bindings)
         defaults = body.get('defaults', {})
         manifest = dict(package['manifest'])
         manifest['parameters'] = {key: dict(value, required=False) for key, value in manifest['parameters'].items()}
@@ -141,7 +168,8 @@ class OcService:
         if not isinstance(enabled, bool):
             raise ValueError('enabled 必须为布尔值')
         return {'name': name, 'description': description, 'package_id': package_id,
-                'device_id': device_id, 'defaults': defaults, 'enabled': enabled}
+                'device_id': device_id, 'environment_id': environment_id, 'asset_bindings': bindings,
+                'defaults': defaults, 'enabled': enabled}
 
     def create_process(self, body):
         with self._lock:
@@ -173,11 +201,14 @@ class OcService:
                     raise ValueError('请求标识已用于不同的流程或参数')
                 return self.get_job(existing['id'])
             process = self.store.get('processes', identifier)
+            if process.get('environment_id'):
+                raise ValueError('Environment 流程请通过运行队列提交')
             package = self.store.get('packages', process['package_id'])
-            resolved = resolve_parameters(package['manifest'], dict(process['defaults'], **parameters))
+            resolved, snapshots = self.resources.resolve_inputs(process, package['manifest'], parameters)
             device = self._refresh_device(self.store.get('devices', process['device_id']))
             self._require_ready(process, device)
             job = self._new_job(process, device, resolved, request_id, signature)
+            job['asset_snapshots'] = snapshots
             self.store.insert('jobs', job)
             if device.get('transport') != 'agent':
                 self._dispatch(job, device, package)
@@ -242,6 +273,8 @@ class OcService:
         job['last_synced_at'] = time.time()
 
     def _synchronize(self, job):
+        if job['state'] == 'queued' or job.get('_transport') == 'unassigned':
+            return job
         if job.get('_transport') == 'agent':
             return job
         if job['state'] in TERMINAL_STATES and (not job['assistant_job_id'] or job.get('_log_complete')):
@@ -302,6 +335,10 @@ class OcService:
             job = self._synchronize(self.store.get('jobs', identifier))
             if job['state'] in TERMINAL_STATES:
                 return _public(job)
+            if job['state'] == 'queued':
+                job.update(state='stopped', finished_at=time.time(), _log_complete=True, queue_reason='')
+                self.store.replace('jobs', job)
+                return _public(job)
             if job.get('_transport') == 'agent':
                 if not job.get('_agent_claimed'):
                     job.update(state='stopped', finished_at=time.time(), _log_complete=True)
@@ -326,7 +363,8 @@ class OcService:
             jobs = self.list_jobs()
             devices = [self._refresh_device(device) for device in self.store.list('devices')]
             return {'packages': self.list_packages(), 'processes': self.store.list('processes'),
-                    'devices': devices, 'jobs': jobs}
+                    'devices': devices, 'jobs': jobs, 'robots': devices,
+                    'environments': self.store.list('environments'), 'assets': self.store.list('assets')}
 
     def agent_package(self, device, job_id):
         with self._lock:

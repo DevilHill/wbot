@@ -50,6 +50,29 @@ class OcServiceTests(unittest.TestCase):
         return self.service.create_process({'name': '问候流程', 'description': '真实执行', 'package_id': package['id'],
             'device_id': device['id'], 'defaults': {'name': '部署默认'}})
 
+    def test_queue_runs_without_browser_and_drains_with_real_assistant(self):
+        from app.oc.server import create_server as create_oc_server
+        process = self.deploy()
+        jobs = [self.service.queue.enqueue(process['id'], {'request_id': f'queued-{index}',
+                    'parameters': {'name': f'队列参数 {index}'}}) for index in range(3)]
+        web = self.root / 'web'
+        web.mkdir()
+        (web / 'index.html').write_text('<html>OC</html>', encoding='utf-8')
+        admin = create_oc_server(self.service, web, 0)
+        thread = threading.Thread(target=admin.serve_forever, kwargs={'poll_interval': .05}, daemon=True)
+        thread.start()
+        try:
+            for index, job in enumerate(jobs):
+                completed = self.finished(job['id'])
+                self.assertEqual(completed['state'], 'succeeded', completed)
+                self.assertEqual(completed['result'], {'name': f'队列参数 {index}'})
+                self.assertIn('已执行', self.service.read_log(job['id'])['log'])
+            self.assertEqual(len(self.execution.list_jobs()), 3)
+        finally:
+            admin.shutdown()
+            admin.server_close()
+            thread.join(timeout=3)
+
     def finished(self, job_id):
         deadline = time.monotonic() + 12
         while time.monotonic() < deadline:

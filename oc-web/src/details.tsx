@@ -1,6 +1,7 @@
+import { PermissionButton } from './permissions';
 import { useEffect, useState } from 'react';
-import { AlertCircle, Check, Copy, FileJson, Square } from 'lucide-react';
-import { Dialog, StatusBadge } from './components';
+import { AlertCircle, Check, Copy, Download, FileJson, Square } from 'lucide-react';
+import { Dialog, SearchBox, StatusBadge } from './components';
 import { activeStates, dateTime, duration, fileSize } from './format';
 import { errorMessage, request } from './api';
 import type { Job, JobLog, Package } from './types';
@@ -19,6 +20,7 @@ export function JobDetails({ job, onClose, onChanged }: { job: Job; onClose: () 
   const [actionError, setActionError] = useState('');
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [logQuery, setLogQuery] = useState('');
   useEffect(() => {
     let cancelled = false;
     let timer: ReturnType<typeof setTimeout>;
@@ -42,16 +44,26 @@ export function JobDetails({ job, onClose, onChanged }: { job: Job; onClose: () 
     try { await navigator.clipboard.writeText(job.id); setCopied(true); }
     catch { setActionError('无法复制到剪贴板，可以选择下方作业 ID 手动复制。'); }
   }
+  function downloadLog() {
+    if (!log) return;
+    const url = URL.createObjectURL(new Blob([log.log], { type: 'text/plain;charset=utf-8' }));
+    const link = document.createElement('a');
+    link.href = url; link.download = `wbot-${job.id}.log`; link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+  const filteredLog = logQuery ? log?.log.split('\n').filter(line => line.toLowerCase().includes(logQuery.toLowerCase())).join('\n') : log?.log;
   return <Dialog title={job.process_name} description="作业详情" onClose={onClose} wide>
-    <div className="dialog-body"><div className="job-detail-state"><StatusBadge state={job.state} />{activeStates.has(job.state) && job.state !== 'stopping' && <button className="button danger" disabled={busy} onClick={stop}><Square size={13} />{busy ? '正在停止…' : '停止任务'}</button>}</div>
+    <div className="dialog-body"><div className="job-detail-state"><StatusBadge state={job.state} />{activeStates.has(job.state) && job.state !== 'stopping' && <PermissionButton permission="jobs.stop" className="button danger" disabled={busy} onClick={stop}><Square size={13} />{busy ? '正在处理…' : job.state === 'queued' ? '取消等待' : '停止任务'}</PermissionButton>}</div>
+      {job.queue_reason && <p className="information-box">{job.queue_reason}</p>}
+      {job.environment_name && <p className="inset-note">Environment：{job.environment_name} · 优先级 {job.priority ?? 50}</p>}
       <div className="job-identity"><code>{job.id}</code><button className="icon-button" onClick={copyId} aria-label="复制作业 ID">{copied ? <Check size={15} /> : <Copy size={15} />}</button></div>
       <dl className="detail-grid"><div><dt>执行设备</dt><dd>{job.device_name}</dd></div><div><dt>固定版本</dt><dd>{job.package_id}</dd></div><div><dt>创建时间</dt><dd>{dateTime(job.created_at)}</dd></div><div><dt>运行耗时</dt><dd>{duration(job.started_at, job.finished_at)}</dd></div><div><dt>完成时间</dt><dd>{dateTime(job.finished_at)}</dd></div><div><dt>最近同步</dt><dd>{dateTime(job.last_synced_at)}</dd></div><div><dt>执行端作业 ID</dt><dd className="mono">{job.assistant_job_id ?? '尚未确认'}</dd></div></dl>
       {(job.error || actionError) && <p className="form-error" role="alert">{actionError || job.error}</p>}
       {(job.sync_error || log?.sync_error || logError) && <div className="information-box warning"><AlertCircle size={17} /><p>{logError || job.sync_error || log?.sync_error} {log?.cached && '当前展示已保存的日志。'}</p></div>}
       <div className="detail-tabs" role="tablist" aria-label="作业内容">{(['log', 'result', 'parameters'] as const).map(value => <button role="tab" aria-selected={tab === value} key={value} className={tab === value ? 'selected' : ''} onClick={() => setTab(value)}>{value === 'log' ? '执行日志' : value === 'result' ? '运行结果' : '输入参数'}</button>)}</div>
-      {tab === 'log' && <div role="tabpanel"><div className="console-heading"><span><i />OUTPUT</span><small>{log?.cached ? '已保存日志' : 'Assistant 日志'}</small></div><pre className="log-view" tabIndex={0}>{log?.log || (log ? '暂无日志输出。' : '正在读取日志…')}</pre></div>}
+      {tab === 'log' && <div role="tabpanel"><div className="log-tools"><SearchBox value={logQuery} onChange={setLogQuery} placeholder="搜索日志内容…" /><button className="button secondary" disabled={!log} onClick={downloadLog}><Download size={14} />下载完整日志</button></div><div className="console-heading"><span><i />OUTPUT</span><small>{log?.cached ? '已保存日志' : 'Assistant 日志'}</small></div><pre className="log-view" tabIndex={0}>{filteredLog || (logQuery ? '没有匹配的日志行。' : log ? '暂无日志输出。' : '正在读取日志…')}</pre></div>}
       {tab === 'result' && <pre className="json-view" role="tabpanel">{job.result === null ? '这个作业尚无返回结果。' : JSON.stringify(job.result, null, 2)}</pre>}
-      {tab === 'parameters' && <pre className="json-view" role="tabpanel">{JSON.stringify(job.parameters, null, 2)}</pre>}
+      {tab === 'parameters' && <div role="tabpanel"><pre className="json-view">{JSON.stringify(job.parameters, null, 2)}</pre>{Object.keys(job.asset_snapshots ?? {}).length > 0 && <><h3 className="detail-section-title">提交时的 Asset 修订</h3><pre className="json-view">{JSON.stringify(job.asset_snapshots, null, 2)}</pre></>}</div>}
     </div>
   </Dialog>;
 }

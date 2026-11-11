@@ -1,3 +1,4 @@
+import { PermissionButton } from './permissions';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AlertTriangle, GitMerge, RefreshCw, ShieldCheck } from 'lucide-react';
 import { Dialog } from './components';
@@ -89,7 +90,7 @@ export function ElementMergeDialog({ repositoryId, requestId, onClose, onChanged
       </>}
     </div>
     <footer className="dialog-footer element-review-footer">
-      {actionable ? closing ? <><button className="button secondary" disabled={busy} onClick={() => setClosing(false)}>继续审阅</button><button className="button danger" type="submit" form="close-element-request" disabled={busy || loading || needsRefresh || !reason.trim()}>{busy ? '正在处理…' : '确认关闭申请'}</button></> : <><button className="button secondary" disabled={busy || loading || needsRefresh} onClick={() => setClosing(true)}>关闭申请</button><button className="button primary" disabled={busy || loading || needsRefresh || !review || !review.changes.length || !canMergeElements(review, choices)} onClick={() => void submit('merge')}><GitMerge size={16} />{busy ? '正在合并…' : '批准并合并到 main'}</button></> : <button className="button secondary" onClick={onClose}>关闭</button>}
+      {actionable ? closing ? <><button className="button secondary" disabled={busy} onClick={() => setClosing(false)}>继续审阅</button><button className="button danger" type="submit" form="close-element-request" disabled={busy || loading || needsRefresh || !reason.trim()}>{busy ? '正在处理…' : '确认关闭申请'}</button></> : <><PermissionButton permission="elements.manage" className="button secondary" disabled={busy || loading || needsRefresh} onClick={() => setClosing(true)}>关闭申请</PermissionButton><PermissionButton permission="elements.manage" className="button primary" disabled={busy || loading || needsRefresh || !review || !review.changes.length || !canMergeElements(review, choices)} onClick={() => void submit('merge')}><GitMerge size={16} />{busy ? '正在合并…' : '批准并合并到 main'}</PermissionButton></> : <button className="button secondary" onClick={onClose}>关闭</button>}
     </footer>
   </Dialog>;
 }

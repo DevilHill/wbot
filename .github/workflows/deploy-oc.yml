@@ -77,8 +77,9 @@ jobs:
           key="$RUNNER_TEMP/oc-deploy-key"
           known="$RUNNER_TEMP/oc-known-hosts"
           trap 'rm -f -- "$key" "$known"' EXIT
-          printf '%s\n' "$OC_SSH_KEY" > "$key"
-          printf '%s\n' "$OC_SSH_KNOWN_HOSTS" > "$known"
+          printf '%s\n' "$OC_SSH_KEY" | tr -d '\r' > "$key"
+          printf '%s\n' "$OC_SSH_KNOWN_HOSTS" | tr -d '\r' > "$known"
+          ssh-keygen -y -f "$key" > /dev/null
           options=(-o BatchMode=yes -o IdentitiesOnly=yes -o ConnectTimeout=15 -o StrictHostKeyChecking=yes -o "UserKnownHostsFile=$known" -i "$key")
           target="$OC_SSH_USER@$OC_SSH_HOST"
           ssh "${options[@]}" "$target" "umask 077; mkdir -p ~/wbot-oc/releases/$GITHUB_SHA"

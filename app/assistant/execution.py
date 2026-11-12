@@ -233,6 +233,8 @@ class ExecutionService:
         environment = dict(os.environ, PYTHONUTF8='1', PYTHONUNBUFFERED='1',
             WBOT_RUN_INPUT=str(input_path), WBOT_RUN_RESULT=str(directory / 'result.json'),
             WBOT_ELEMENT_LIBRARY=str(library_path))
+        if getattr(self, "browser_url", None):
+            environment["WBOT_BRIDGE_URL"] = self.browser_url
         worker = Path(__file__).with_name('worker.py')
         process = subprocess.Popen([self.python_executable, '-I', '-X', 'utf8', '-u', str(worker), str(input_path)],
             cwd=working, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,

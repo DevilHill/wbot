@@ -346,3 +346,10 @@ python -m unittest discover -s tests -p "test_assistant*.py" -v
 | 服务重启后显示中断待核实 | 先核实业务系统结果，再决定是否作为新作业重跑 |
 
 当前未实现 Assistant 组织登录及授权目录同步、定时调度、业务凭据托管、开机服务、自动环境准备或完整无人值守桌面能力。远程设备绑定、手动派发与结果回报已经提供；Qt 的“我的自动化”仍展示本机已安装包，OC 的流程名称、用户授权与部署目录尚未同步成 Assistant 的业务目录。其余能力按产品需求继续建设，不计为开发预览已经交付。
+
+
+## 0.9.0：统一元素与浏览器服务
+
+Assistant 后台启动时持有本机 8790 浏览器桥，VS Code 插件通过 Assistant 会话调用元素库、抓取与 XPath 校验。插件不再启动独立 Python 服务；关闭编辑器不影响 Assistant。默认沿用 `~/.xpath_studio/elements.sqlite3`，启动 Assistant 前可用 `WBOT_ELEMENT_LIBRARY` 指定原有自定义库；`WBOT_BROWSER_PORT` 可调整监听端口（隔离测试可用 0），浏览器扩展目录会按实际地址生成。
+
+升级需同时更新 Assistant 与插件到 0.9.0，重新加载旧版 VS Code 窗口释放其桥接端口。端口冲突时 Assistant 继续提供任务与连接功能，元素操作明确报错，不复用身份不明的服务。浏览器扩展通过插件“准备浏览器扩展目录”取得 Assistant 持有的副本。

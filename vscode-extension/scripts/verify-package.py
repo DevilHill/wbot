@@ -33,14 +33,15 @@ def main():
         commands = {item['command'] for item in manifest['contributes']['commands']}
         assert commands == {item['command'] for item in source_manifest['contributes']['commands']}
         assert {'wbot.newScript', 'wbot.runFile', 'wbot.debugFile', 'wbot.pick',
-                'wbot.insertElement', 'wbot.startBridge', 'wbot.installRuntime',
+                'wbot.insertElement', 'wbot.installRuntime',
                 'wbot.initProject', 'wbot.buildPackage', 'wbot.sharedElements',
                 'wbot.connectSharedElements', 'wbot.requestElementMerge'} <= commands
         assert not {'wbot.newFlow', 'wbot.openWorkbench'} & commands
         assert not manifest['contributes'].get('customEditors')
         assert not any(event.startswith('onCustomEditor:') for event in manifest['activationEvents'])
         forbidden = ('extension/media/flow-', 'extension/src/flow-editor.js',
-                     'extension/runtime/flow_runner.py', 'extension/runtime/app/web/',
+                     'extension/runtime/flow_runner.py', 'extension/runtime/bridge_server.py',
+                     'extension/runtime/extension/', 'extension/src/bridge.js', 'extension/runtime/app/web/',
                      'extension/runtime/app/assistant/web/')
         assert not any(name.startswith(forbidden) or name.endswith('.wbot.json') for name in names)
         assert {'extension/runtime/app/automation_package.py', 'extension/runtime/app/processes.py'} <= names
@@ -59,8 +60,6 @@ def main():
                 inside = relative.removeprefix('runtime/')
                 if inside.startswith(('app/', 'wbot/', 'extension/')):
                     source = root / inside
-                elif inside == 'bridge_server.py':
-                    source = extension / 'scripts' / inside
             assert source.is_file(), source
             assert archive.read(name) == source.read_bytes(), name
             checked += 1

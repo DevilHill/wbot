@@ -2,6 +2,7 @@
 const assert = require('node:assert/strict');
 const {randomUUID} = require('node:crypto');
 const {requestAssistant} = require('../src/assistant-client');
+const {configureLegacy}=require('./host-settings');
 const {startSharedFixture} = require('./shared-fixture');
 
 async function verifySharedElementsHost(vscode, check) {
@@ -10,8 +11,7 @@ async function verifySharedElementsHost(vscode, check) {
   const previousLibrary = configuration.get('libraryPath');
   const previousAssistant = configuration.get('assistantStateDir');
   try {
-    await configuration.update('libraryPath', fixture.library_path, vscode.ConfigurationTarget.Global);
-    await configuration.update('assistantStateDir', fixture.assistant_dir, vscode.ConfigurationTarget.Global);
+    await configureLegacy(vscode,{libraryPath:fixture.library_path,assistantStateDir:fixture.assistant_dir});
     const initial = await requestAssistant(fixture.assistant_dir, 'status', {library_path:fixture.library_path});
     await requestAssistant(fixture.assistant_dir, 'connect', {library_path:fixture.library_path,
       repository_id:fixture.repository_id, branch_name:'host-diff', expected_fingerprint:initial.fingerprint,
@@ -28,7 +28,7 @@ async function verifySharedElementsHost(vscode, check) {
     const status = await vscode.commands.executeCommand('wbot.sharedElementStatus');
     assert.equal(status.dirty, true);
     assert.equal(status.binding.repository_id, fixture.repository_id);
-    const extension = vscode.extensions.getExtension('xpath-studio-local.wbot-studio');
+    const extension = vscode.extensions.getExtension(require('../package.json').publisher+'.'+require('../package.json').name);
     await extension.exports.sharedView.refresh();
     const rows = extension.exports.sharedView.provider.getChildren();
     assert.ok(rows.some(row => row.changeId === 'search'));
@@ -37,8 +37,7 @@ async function verifySharedElementsHost(vscode, check) {
     check('原生共享侧栏呈现真实变更，元素行连接原生差异命令');
     check('共享元素真实 Assistant 通信、命令注册、原生只读差异与状态文档');
   } finally {
-    await configuration.update('libraryPath', previousLibrary, vscode.ConfigurationTarget.Global);
-    await configuration.update('assistantStateDir', previousAssistant, vscode.ConfigurationTarget.Global);
+    await configureLegacy(vscode,{libraryPath:previousLibrary,assistantStateDir:previousAssistant});
     await fixture.close();
   }
 }

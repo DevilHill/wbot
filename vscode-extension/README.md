@@ -1,8 +1,30 @@
-# WBot Studio for VS Code · 编码版
+# WBot 开发工具
 
-**WBot 开发工具 0.7.1** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
+**WBot 开发工具 0.9.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
 
-支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可直接发布到 Assistant 或 OC，使用说明见源码仓库的 `docs/assistant.md`。默认普通脚本演示文本替换与日志，无需启动浏览器。
+支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可直接发布到 Assistant 或 OC，使用说明见[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md)。默认普通脚本演示文本替换与日志，无需启动浏览器。
+
+## 环境要求
+
+- 当前完整产品面向 Windows x64，本机 VS Code 1.90+，项目 Python 3.10+。
+- 元素库、抓取与定位需要单独运行 Assistant 0.9.0+，不需要配置 OC 即可使用本地元素功能。
+- Python 提示使用 Microsoft Python / Pylance；调试需 Microsoft Python Debugger。
+- [Assistant 获取与使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) · [问题反馈](https://github.com/DevilHill/wbot/issues)
+
+## 连接 Assistant 和 OC
+
+WBot 侧栏的“连接”只包含两个入口：
+
+- **本机 Assistant**：打开 Assistant 后，插件自动检查运行进程、本机会话和产品身份，并在约 10 秒内显示已连接；无需填写 URL、端口或数据目录。Windows 支持从进程发现自定义数据目录。同一台电脑存在多个实例时，点击这一项选择要使用的实例。失联会显示未运行，重启原实例后自动恢复。
+- **OC 平台**：直接读取当前 Assistant 的 OC 绑定状态。Assistant 离线时显示离线并提示启动；未绑定时点击这一项，按“OC 地址 → 设备名称 → 接入 Key”提交给 Assistant。待审批、已批准、拒绝、撤销和连接错误会自动更新。已有绑定重连可留空 Key。
+
+OC 连接与 Assistant 绑定一致，不另建插件账号连接。Key 只提交给本机 Assistant，不写入插件设置或发布记录；OC 管理员核对并批准设备后，共享元素功能复用这条连接。点击 OC 项可查看确认码、打开平台、重新绑定或明确断开；断开会影响使用同一 Assistant 的其他工具。
+
+发布到 OC 时目标地址来自 Assistant 的已批准绑定。上传自动化包仍按 OC 现有权限要求验证开发者账号；该发布授权只用于当次上传，不建立独立的插件连接，不保存密码。
+
+元素库、浏览器连接、抓取、XPath 校验与高亮统一由 Assistant 0.9.0 或更新版本提供。插件不再启动 Python 浏览器服务；Assistant 离线时显示启动提示。开发者 Python 仅用于项目构建、脚本运行与调试。设置页只保留 Python 解释器和脚本参数。
+
+升级时同时更新 Assistant 与插件，并重新加载 VS Code，释放旧插件占用的 8790 端口。 Assistant 仅关闭窗口不会停止后台；先等待任务结束并从托盘退出旧界面，再在新版程序目录执行 `WBotAssistant.exe stop`、`WBotAssistant.exe open`，完成后台版本切换。默认继续使用 `~/.xpath_studio/elements.sqlite3`。原先使用自定义库的用户可通过旧版导出 JSON 后导入，或在启动 Assistant 时设置 `WBOT_ELEMENT_LIBRARY` 为原库路径；插件的旧 `bridgeUrl` / `libraryPath` 配置不再控制服务。
 
 ## 0.7 开发、元素与发布
 
@@ -10,11 +32,11 @@
 - 新增和编辑使用一个紧凑表单，集中填写名称、分组、XPath、页面与描述；保存失败保留草稿。
 - 共享仓库侧栏持续显示仓库、分支、申请状态和本地修改；可见时每 15 秒更新，也可手动刷新。连接异常保留上次数据并明确提示，写入前仍会重新校验状态。
 - 点击变更元素打开该元素的原生 Diff；“查看本地差异”也可选择完整快照。侧栏仓库图标根据当前状态提供下一步操作，详细 JSON 保留为诊断入口。
-- 欢迎内容按浏览器服务是否连接区分准备环境和添加元素；进度通知说明正在读取、提交还是拉取。
+- 欢迎内容按本地元素库是否就绪区分准备环境和添加元素；进度通知说明正在读取、提交还是拉取。
 
 ## 安装与首次使用
 
-1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.7.1.vsix`。本版通过 VSIX 分发，未发布到 Marketplace。
+1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.9.0.vsix`。正式 Marketplace 版本与本地测试版属于不同扩展身份，请避免同时启用。
 2. 打开本机项目文件夹，并将工作区设为受信任。需要 VS Code **1.90+** 和 Python **3.10+**。
 3. 打开左侧 **WBot**，执行 **选择 Python 解释器**，选择项目环境中的 `python.exe`。留空时依次使用 Microsoft Python 扩展当前解释器、项目 `.venv` 或 PATH 中的 `python`。
 4. 执行 **WBot: 将 wbot 安装到所选 Python 环境**，等待终端显示安装成功。VSIX 内置 wbot wheel，安装 `lxml` 依赖可能需要网络。
@@ -49,27 +71,27 @@
 
 初始化入口使用 `wbot.runtime.parameters()` 和 `runtime.set_result()`，需要 Assistant 提供运行上下文；请通过“构建 → 发布 → 在 Assistant 运行”验证该示例。现有“运行当前 Python 脚本”和 Python Debugger 不会自动注入这一上下文，普通脚本运行调试继续保持原有行为。
 
-元素资产需要显式导出为 `wbot-elements` JSON，列入清单的 `files` 并填写 `elements` 路径。发布脚本应使用 `selector.SelectorStore()` 读取 Assistant 提供的任务元素库；从旧代码插入模板得到的个人绝对路径需移除，避免继续访问开发机全局库。清单完整示例、命令行用法、依赖与运行限制见源码仓库的 `docs/assistant.md`。
+元素资产需要显式导出为 `wbot-elements` JSON，列入清单的 `files` 并填写 `elements` 路径。发布脚本应使用 `selector.SelectorStore()` 读取 Assistant 提供的任务元素库；从旧代码插入模板得到的个人绝对路径需移除，避免继续访问开发机全局库。清单完整示例、命令行用法、依赖与运行限制见[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md)。
 
 ## 网页自动化与元素抓取
 
 仅处理文本、文件等任务时，可直接运行 Python。需要操作已打开的 Chrome / Edge 网页时，再准备浏览器桥：
 
-1. 点击 WBot 侧栏的插头图标，执行 **启动 / 连接浏览器服务**。
+1. 打开 Assistant 0.9.0 或更新版本，再打开 WBot 元素库，插件自动连接，无需选择 Python 来启动服务。
 2. 执行 **WBot: 准备浏览器扩展目录**。目录会复制到剪贴板并在文件管理器中打开。
 3. 进入 `chrome://extensions` 或 `edge://extensions`，开启开发者模式，选择 **加载已解压的扩展程序**，加载上述目录，再刷新目标网页。
 4. 在 WBot 侧栏点击 **抓取元素**。切换到网页，悬停选择元素，`Ctrl + 左键` 锁定，`Enter` 确认；回到 VS Code 填写名称、分组、XPath、页面 URL 和描述。
 5. 在元素条目上点击代码图标，向当前 Python 文件插入调用代码。根据任务补上点击、输入或读取文本等操作。
 
-浏览器扩展首次加载需在浏览器管理页面完成。已有 XPath Studio 1.4.0 浏览器扩展且连接地址一致时可以继续使用；更新后重新加载扩展并刷新网页。VS Code 扩展独立启动本机桥服务，使用时无需打开桌面应用。
+浏览器扩展首次加载需在浏览器管理页面完成。已有 XPath Studio 1.4.0 浏览器扩展且连接地址一致时可以继续使用；更新后重新加载扩展并刷新网页。浏览器桥由 Assistant 后台持有，关闭 VS Code 后仍可使用；停止 Assistant 后台后抓取和定位不可用。
 
 ## 元素库与代码片段
 
-- 按组展示、搜索、新增、编辑、删除；单击元素复制 XPath，代码图标插入调用代码。
+- 按组展示、搜索、新增、编辑、删除；单击查看详情，复制按钮复制 XPath，代码图标插入调用代码。
 - 支持 `wbot-elements` JSON 导入 / 导出；导入同名记录时可选择停止、跳过或替换。
-- 默认数据库为 `~/.xpath_studio/elements.sqlite3`，与 `wbot.ElementLibrary()` 共用。通过 `wbot.libraryPath` 可指定另一个绝对路径。
+- 默认数据库为 `~/.xpath_studio/elements.sqlite3`，与 `wbot.ElementLibrary()` 共用。数据库路径由 Assistant 返回，插件统一使用该元素库。
 - **校验并高亮**使用最近抓取结果的浏览器、标签页、框架和文档身份；更换页面或导航后请重新抓取，跨域 iframe 的 XPath 只在对应框架内有效。
-- 插入的代码带有服务地址和元素库路径；移到其他机器时需调整这些参数。
+- 插入代码使用 Assistant 的浏览器地址，元素库路径由运行环境提供。
 
 ```python
 from wbot import web, selector
@@ -86,9 +108,9 @@ element.input("wbot")
 
 ## 共享元素仓库、版本与合并
 
-共享元素入口位于 WBot 元素库标题栏的菜单，也可在命令面板执行 **WBot: 共享元素仓库**。它复用当前 `wbot.libraryPath` 指向的元素库；元素的抓取、编辑和校验仍使用原有操作。
+共享元素入口位于 WBot 元素库标题栏的菜单，也可在命令面板执行 **WBot: 共享元素仓库**。它复用当前本地元素库；元素的抓取、编辑和校验仍使用原有操作。
 
-先启动包含共享元素接口的新版 Assistant，在其连接设置中填写 OC 地址并由管理员批准设备绑定。OC 管理员在“共享元素”创建仓库。插件通过 Assistant 本机会话访问共享仓库，远端设备密钥只由 Assistant 持有。若使用独立预览数据目录，将 `wbot.assistantStateDir` 指向该目录；不需要在插件中重复填写 OC 地址或密钥。
+先启动包含共享元素接口的新版 Assistant，在其连接设置中填写 OC 地址和接入 Key，再由管理员批准设备绑定。OC 管理员在“共享元素”创建仓库。插件通过 Assistant 本机会话访问共享仓库，远端设备密钥只由 Assistant 持有。Windows 下独立预览实例会通过运行进程被发现，在“本机 Assistant”选择即可，无需填写目录。
 
 1. 执行 **连接共享元素仓库 / 创建分支**，选择仓库并填写个人分支名称。共享主分支中本地缺少的元素会加入当前库；已有相同 ID 的元素保留本地内容，作为待提交修改。不同 ID 的同分组同名元素会导致操作停止，需要先处理冲突。
 2. 通过现有元素库编辑或抓取 XPath，执行 **查看共享元素本地差异**。VS Code 只读差异编辑器对比最近提交与本地元素，涵盖名称、分组、XPath、URL、框架和描述。
@@ -107,20 +129,15 @@ element.input("wbot")
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `wbot.pythonPath` | 空 | Python 可执行文件路径，不含参数 |
-| `wbot.bridgeUrl` | `http://127.0.0.1:8790` | 仅支持本机 HTTP 服务 |
-| `wbot.libraryPath` | 空 | 空值使用默认元素库；否则须为绝对路径 |
-| `wbot.assistantStateDir` | 空 | 共享元素使用的 Assistant 数据目录；空值为 `~/.wbot-assistant`，支持 `~/` 路径 |
 | `wbot.scriptArgs` | `[]` | 运行 / 调试脚本的字符串参数数组 |
 
-修改服务端口、解释器或数据库路径后，请停止本扩展的服务，再启动。修改端口后还需重新执行 **准备浏览器扩展目录**，并在浏览器中重新加载扩展。
-
-已有 XPath Studio 1.4.0 服务时会复用它，`wbot.libraryPath` 应与外部服务实际使用的数据库一致。**停止本扩展启动的服务**只关闭本扩展创建的子进程；VS Code 退出时也会关闭该子进程。
+元素服务随 Assistant 后台运行；退出 VS Code 不会停止 Assistant 或浏览器桥。
 
 ## 故障处理与范围
 
 - 运行报 `No module named wbot`：确认 **选择 Python 解释器** 与安装 wbot 时使用的是同一个环境。
 - 调试提示缺少扩展：安装 Microsoft Python Debugger（`ms-python.debugpy`）。
-- 服务启动失败：检查 **输出 → WBot**，确认 Python 中已有 wbot / lxml、端口可用。
+- 元素服务不可用：确认 Assistant 已升级到 0.9.0 并重启后台；端口被占用时先重新加载旧版 VS Code 窗口，释放旧插件持有的服务。查看 **输出 → WBot** 获取具体原因。
 - 没有浏览器连接：确认浏览器扩展已启用、地址和端口一致，刷新普通 HTTP/HTTPS 网页；浏览器内部页面不能抓取。
 - 抓取后暂不显示：点击侧栏刷新；外部修改数据库后也需要刷新。
 - 仅支持本机可信工作区；不支持 Remote SSH、WSL、Dev Container 和虚拟工作区。
@@ -143,9 +160,9 @@ npm run package
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
 ```
 
-产物为仓库 `dist/wbot-studio-0.7.1.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目包工具、浏览器桥、抓取扩展、wbot 及其 wheel，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按源码仓库的 `docs/assistant.md` 启动；VSIX 不作为 Assistant 桌面安装包。
+产物为仓库 `dist/wbot-studio-0.9.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目构建工具、wbot 及其 wheel；浏览器桥与抓取扩展由 Assistant 提供，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) 启动；VSIX 不作为 Assistant 桌面安装包。
 
-`npm test` 运行编码版与桥服务回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
+`npm test` 运行插件与 Assistant 元素服务通信回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
 
 ```powershell
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/test-host.py --code "你的 VS Code 可执行文件绝对路径"
@@ -168,8 +185,8 @@ npm run package
 
 ## 发布认证与回执
 
-- Assistant：从 `wbot.assistantStateDir` 读取本机会话，只访问回环地址；通过已有包安装接口交付，任务托管仍由 Assistant 负责。
-- OC：设置 `wbot.ocUrl` 或在发布时输入 HTTPS 地址，使用具有 `packages.manage` 权限的开发者账号登录。密码只用于本次发布，完成后退出会话；不借用 Robot 设备授权。仅本机测试允许 HTTP。
+- Assistant：自动发现运行中的本机 Assistant 并读取其会话，只访问回环地址；通过已有包安装接口交付，任务托管仍由 Assistant 负责。
+- OC：目标地址跟随 Assistant 的已批准绑定，使用具有 `packages.manage` 权限的开发者账号完成本次上传授权。密码只用于本次发布，完成后退出会话，不保存密码。发布接口要求 HTTPS，仅本机测试允许 HTTP。
 - 回执中的包名、版本、标识匹配后才标为成功。网络异常显示“未确认”，先核对目标包列表；不会自动重放上传。
 - **WBot: 查看发布记录** 保存最近 100 次的目标、版本、产物路径和回执，不保存密码、Cookie 或设备凭据。
 - 发布到 OC 后，由管理端选择 Robot / Environment 部署流程并配置任务调度。发布、部署、运行是三个独立操作。

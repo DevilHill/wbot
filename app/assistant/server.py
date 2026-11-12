@@ -9,6 +9,7 @@ import secrets
 import threading
 from urllib.parse import urlsplit
 
+from .browser_service import BrowserService
 from .protocol import MAX_REQUEST_BYTES
 from .shared_elements import SharedElementService
 from .remote_client import GatewayError
@@ -25,15 +26,17 @@ STATIC_FILES = {
 
 
 class AssistantServer(ThreadingHTTPServer):
-    def __init__(self, execution, port, connection=None):
+    def __init__(self, execution, port, connection=None, *, browser_port=None, library_path=None):
         self.updates = UpdateService(execution, connection)
         super().__init__(("127.0.0.1", port), AssistantHandler)
+        self.browser = BrowserService(execution.state_dir, browser_port, library_path)
         self.execution = execution
         self.oc_connection = connection
         self.shared_elements = SharedElementService(connection) if connection is not None else None
         self.token = secrets.token_urlsafe(32)
 
     def server_close(self):
+        self.browser.close()
         self.updates.close()
         super().server_close()
 
@@ -150,6 +153,10 @@ class AssistantHandler(BaseHTTPRequestHandler):
         execution = self.server.execution
         if path == "/api/session":
             self._json(200, {"token": self.server.token, "mode": "local"})
+        elif path == "/api/browser":
+            info = self.server.browser.start()
+            execution.browser_url = info["bridge_url"]
+            self._json(200, info)
         elif path == "/api/health":
             self._json(200, {"ok": True, "product": "wbot-assistant", "mode": "local",
                              "version": VERSION, "updating": execution.updating})
@@ -179,7 +186,9 @@ class AssistantHandler(BaseHTTPRequestHandler):
 
     def _post(self, path, body):
         execution = self.server.execution
-        if path.startswith('/api/updates/'):
+        if path == "/api/browser":
+            self._json(200, self.server.browser.dispatch(body))
+        elif path.startswith('/api/updates/'):
             self._update_action(path, body)
         elif path.startswith('/api/shared-elements/'):
             self._connection()
@@ -248,5 +257,5 @@ class AssistantHandler(BaseHTTPRequestHandler):
         self._json(200, {'update': result})
 
 
-def create_server(execution, port=0, connection=None):
-    return AssistantServer(execution, port, connection)
+def create_server(execution, port=0, connection=None, *, browser_port=None, library_path=None):
+    return AssistantServer(execution, port, connection, browser_port=browser_port, library_path=library_path)

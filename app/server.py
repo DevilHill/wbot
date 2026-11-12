@@ -131,6 +131,10 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):  # 静音默认日志
         pass
 
+    def _element_library(self):
+        from wbot.elements import ElementLibrary
+        return ElementLibrary(getattr(self.server, "element_library_path", ELEMENTS_PATH))
+
     # ---- 工具方法 ----
     def _send_json(self, obj: Any, status: int = 200) -> None:
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -234,7 +238,7 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path in ("/api/elements", "/api/elements/export"):
             try:
-                library = element_library()
+                library = self._element_library()
                 if path.endswith("/export"):
                     self._send_json({"ok": True, "data": library.export_data()})
                 else:
@@ -370,7 +374,7 @@ class Handler(BaseHTTPRequestHandler):
             result = ws_bridge.HUB.request_browser(body.get("target"), action, xpath, options=options)
             self._send_json(result)
             return
-        library = element_library()
+        library = self._element_library()
         if path == "/api/elements/save":
             self._send_json({"ok": True, "item": library.upsert(body.get("record"))})
         elif path == "/api/elements/delete":

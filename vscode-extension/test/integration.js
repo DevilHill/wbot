@@ -2,9 +2,11 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
 const path = require('node:path');
-const net = require('node:net');
+const {startSharedFixture}=require('./shared-fixture');
+const {requestBrowser}=require('../src/assistant-browser');
 const vscode = require('vscode');
 const core = require('../src/core');
+const {configureLegacy}=require('./host-settings');
 const {verifySharedElementsHost} = require('./shared-host');
 
 async function until(predicate, timeout=30000) {
@@ -101,13 +103,20 @@ async function run() {
   const workspace = vscode.workspace.workspaceFolders[0].uri.fsPath;
   const report = {checks:[],skipped:[],passed:false};
   const check = name => report.checks.push(name);
-  let api;
+  let api, fixture;
   try {
     assert.equal(vscode.workspace.isTrusted,true);
-    const extension = vscode.extensions.getExtension('xpath-studio-local.wbot-studio');
+    fixture=await startSharedFixture();
+    await configureLegacy(vscode,{assistantStateDir:fixture.assistant_dir});
+    const extension = vscode.extensions.getExtension(require('../package.json').publisher+'.'+require('../package.json').name);
     assert.ok(extension);
     api = await extension.activate();
     check('扩展激活');
+    await api.connectionReady;
+    await api.refreshConnections();
+    assert.deepEqual(api.connectionView.getChildren(),['assistant','oc']);
+    for(const key of ['bridgeUrl','assistantStateDir','libraryPath','ocUrl']) assert.equal(extension.packageJSON.contributes.configuration.properties['wbot.'+key],undefined);
+    check('连接侧栏仅 Assistant 与 OC，常规设置不再要求地址和数据目录');
     const commands = await vscode.commands.getCommands(true);
     for (const command of extension.packageJSON.contributes.commands) assert.ok(commands.includes(command.command),command.command);
     check('全部 '+extension.packageJSON.contributes.commands.length+' 个命令已注册');
@@ -124,22 +133,20 @@ async function run() {
     assert.equal(vscode.window.activeTextEditor.document.getText(),original);
     assert.ok(!vscode.window.tabGroups.all.some(g=>g.tabs.some(t=>t.input?.viewType==='wbot.flowEditor')));
     check('已有 .wbot.json 文件仍可作为普通文本打开，内容保持不变');
-    const socket = net.createServer();
-    await new Promise(resolve => socket.listen(0,'127.0.0.1',resolve));
-    const port = socket.address().port;
-    await new Promise(resolve => socket.close(resolve));
-    const base = `http://127.0.0.1:${port}`, database = path.join(workspace,'elements.sqlite3');
+    const info=await requestBrowser(fixture.assistant_dir);
+    const base=info.bridge_url, database=info.library_path;
     const cfg = vscode.workspace.getConfiguration('wbot');
-    await cfg.update('bridgeUrl',base,vscode.ConfigurationTarget.Global);
     await cfg.update('pythonPath',process.env.WBOT_TEST_PYTHON,vscode.ConfigurationTarget.Global);
-    await cfg.update('libraryPath',database,vscode.ConfigurationTarget.Global);
+
     await executeTask('wbot.installRuntime');
     check('安装内置 wheel 到测试 Python 环境');
-    await vscode.commands.executeCommand('wbot.startBridge');
-    assert.ok(api.bridge.child);
+    await cfg.update('pythonPath','C:/missing-python/python.exe',vscode.ConfigurationTarget.Global);
+    await api.refresh();
+    assert.equal(api.bridge,undefined);
+    await cfg.update('pythonPath',process.env.WBOT_TEST_PYTHON,vscode.ConfigurationTarget.Global);
     assert.equal((await core.request(base,'/api/health')).wbot,'0.1.1');
-    check('从 VS Code 启动真实 Python 桥接服务');
-    const record = (await core.request(base,'/api/elements/save',{record:{name:'搜索"框 ${1}',group:'中文分组',xpath:'//input[@id="q"]',url:'https://example.com'}})).item;
+    check('Python 路径无效时仍通过 Assistant 读取元素库，插件不创建服务进程');
+    const record = (await requestBrowser(fixture.assistant_dir,'/api/elements/save',{record:{name:'搜索"框 ${1}',group:'中文分组',xpath:'//input[@id="q"]',url:'https://example.com'}})).item;
     await api.refresh();
     assert.equal(api.getElements().length,1);
     const groups = api.provider.getChildren();
@@ -204,15 +211,15 @@ async function run() {
     check('真实 VS Code 构建命令保存当前项目并生成带版本的自动化发布包');
     if(process.env.WBOT_TEST_DEBUGGER==='1') await verifyPythonDebugger(workspace,check);
     else report.skipped.push('Python debugpy 端到端测试：未传 --debugger-extension');
-    await vscode.commands.executeCommand('wbot.stopBridge');
-    assert.equal(api.bridge.child,null);
-    await assert.rejects(core.request(base,'/api/health'));
-    check('停止本扩展创建的服务');
+    assert.equal(commands.includes('wbot.stopBridge'),false);
+    require('../extension').deactivate();
+    assert.equal((await core.request(base,'/api/health')).ok,true);
+    check('插件停用不会关闭 Assistant 的浏览器服务');
     await verifySharedElementsHost(vscode, check);
     report.passed = true;
   } catch (error) { report.error = error.stack; throw error; }
   finally {
-    if (api) await api.bridge.stop();
+    if (fixture) await fixture.close();
     await fs.writeFile(path.join(workspace,'integration-report.json'),JSON.stringify(report,null,2));
   }
 }

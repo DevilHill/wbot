@@ -45,7 +45,21 @@ def main():
     from app import server
     server.CONFIG_PATH = work / 'config.json'
     server.ELEMENTS_PATH = work / 'elements.sqlite3'
-    app, port = server.run_server(0)
+    assistant_mode = '--assistant' in sys.argv
+    execution = None
+    if assistant_mode:
+        from app.assistant.execution import ExecutionService
+        from app.assistant.server import create_server
+        from app.assistant.lifecycle import _request
+        execution = ExecutionService(work / 'assistant')
+        app = create_server(execution, browser_port=0, library_path=server.ELEMENTS_PATH)
+        threading.Thread(target=app.serve_forever, daemon=True).start()
+        metadata = {'url': app.origin, 'token': app.token}
+        browser_info = _request(metadata, '/api/browser')
+        from urllib.parse import urlsplit
+        port = urlsplit(browser_info['bridge_url']).port
+    else:
+        app, port = server.run_server(0)
     page = ThreadingHTTPServer(('127.0.0.1', 0), PageHandler)
     threading.Thread(target=page.serve_forever, daemon=True).start()
     ext = work / 'extension'
@@ -136,6 +150,35 @@ def main():
             'xpath': "//button[@id='inside']", 'url': browser.url, 'frame': browser.target})
         stored = selector.SelectorStore(server.ELEMENTS_PATH).get('测试按钮', '真实浏览器')
         check('元素库存盘后按名称执行', browser.find(stored, timeout=0).get_text() == 'Live button')
+        if assistant_mode:
+            saved = _request(metadata, '/api/browser', {'path': '/api/elements/save',
+                'body': {'record': {'name': 'Assistant按钮', 'xpath': "//button[@id='inside']", 'frame': browser.target}}})
+            items = _request(metadata, '/api/browser', {'path': '/api/elements'})['items']
+            check('Assistant 会话保存并读取真实页面元素', any(item['id'] == saved['item']['id'] for item in items))
+            def assistant_validate(xpath):
+                return _request(metadata, '/api/browser', {'path': '/api/bridge/validate',
+                    'body': {'target': browser.target, 'action': 'validate', 'xpath': xpath}})
+            def highlighted():
+                return evaluate(sid, "runFrame(()=>document.querySelector('#__xpath_studio_overlay__').shadowRoot.querySelectorAll('.ov-hl').length)")
+            result = assistant_validate("//button[@id='inside']")
+            check('Assistant 校验返回真实匹配结果', result['valid'] and result['count'] == 1)
+            check('来源跨域 iframe 实际出现高亮', highlighted() == 1)
+            check('顶层同 ID 元素没有被误高亮', evaluate(sid, "(async()=> (await chrome.scripting.executeScript({target:{tabId:testTab.id,frameIds:[0]},func:()=>!document.querySelector('#__xpath_studio_overlay__').shadowRoot.querySelector('.ov-hl')}))[0].result)()"))
+            result = assistant_validate('//missing')
+            check('零匹配清除旧高亮', result['count'] == 0 and highlighted() == 0)
+            assistant_validate('//button')
+            result = assistant_validate('//*[')
+            check('无效 XPath 清除高亮并返回错误', not result['valid'] and highlighted() == 0)
+            assistant_validate('//button')
+            out = ROOT / 'output/playwright'
+            out.mkdir(parents=True, exist_ok=True)
+            (out / 'assistant-browser-highlight.png').write_bytes(base64.b64decode(call('Page.captureScreenshot', {'format': 'png'}, page_sid)['data']))
+            evaluate(sid, 'chrome.tabs.reload(testTab.id)')
+            time.sleep(.5)
+            result = assistant_validate('//button')
+            check('导航后拒绝对新文档误定位', not result.get('ok', True) and '重新抓取' in result['error'])
+            print(f'Assistant 真实浏览器：{checks} 项通过', flush=True)
+            return 0
         ui_target = call('Target.createTarget', {'url': f'http://127.0.0.1:{port}/'})['targetId']
         ui = call('Target.attachToTarget', {'targetId': ui_target, 'flatten': True})['sessionId']
         assert wait_document(ui)
@@ -220,6 +263,8 @@ def main():
         except subprocess.TimeoutExpired:
             if proc.poll() is None: proc.kill(); proc.wait(timeout=5)
         app.shutdown(); app.server_close()
+        if execution:
+            execution.shutdown()
         page.shutdown(); page.server_close()
         chrome_log.close()
 

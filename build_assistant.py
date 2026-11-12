@@ -101,8 +101,10 @@ def copy_runtime(bundle):
     app = source_root / 'app'
     assistant = app / 'assistant'
     assistant.mkdir(parents=True)
-    for name in ('__init__.py', 'automation_package.py', 'assistant_release.py', 'processes.py'):
+    for name in ('__init__.py', 'automation_package.py', 'assistant_release.py', 'processes.py',
+                 'server.py', 'ws_bridge.py', 'ai_client.py', 'xpath_engine.py', 'extension_installer.py'):
         shutil.copy2(ROOT / 'app' / name, app / name)
+    copy_tree(ROOT / 'extension', source_root / 'extension')
     for source in (ROOT / 'app' / 'assistant').glob('*.py'):
         if not source.name.startswith('qt_'):
             shutil.copy2(source, assistant / source.name)
@@ -181,12 +183,22 @@ print(json.dumps({'python':sys.version.split()[0], 'wbot':m.version('wbot'), 'lx
         command = [str(interpreter), '-m', 'app.assistant']
         try:
             run([*command, 'start', '--state-dir', str(state), '--port', '0'], cwd=source_root,
+                env=dict(os.environ, WBOT_BROWSER_PORT='0', WBOT_ELEMENT_LIBRARY=str(Path(temporary) / 'elements.sqlite3')),
                 capture_output=True, text=True, encoding='utf-8', timeout=25)
             # 由便携运行环境自己构建、导入并执行，校验冻结界面之外的真实任务路径。
             check = '''import importlib.metadata, json, pathlib, tempfile, time, sys
 from app.automation_package import create_project, build_package
 from app.assistant.lifecycle import _read_metadata, _request
 state = pathlib.Path(sys.argv[1]); metadata = _read_metadata(state)
+browser = _request(metadata, '/api/browser')
+assert pathlib.Path(browser['library_path']).parent == state.parent
+saved = _request(metadata, '/api/browser', {'path':'/api/elements/save', 'body':{'record':{'name':'portable-element', 'xpath':'//input'}}})
+assert saved['item']['name'] == 'portable-element'
+assert _request(metadata, '/api/browser', {'path':'/api/elements'})['items'][0]['id'] == saved['item']['id']
+prepared = _request(metadata, '/api/browser', {'path':'/api/extension/prepare'})
+assert (pathlib.Path(prepared['directory']) / 'manifest.json').is_file()
+assert browser['bridge_url'] in (pathlib.Path(prepared['directory']) / 'background.js').read_text(encoding='utf-8')
+print('便携包内置元素服务和浏览器扩展资源验证通过')
 with tempfile.TemporaryDirectory() as directory:
     project = pathlib.Path(directory) / 'demo'
     manifest = create_project(project, 'portable-check')

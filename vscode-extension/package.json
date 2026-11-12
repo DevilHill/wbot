@@ -2,8 +2,8 @@
   "name": "wbot-studio",
   "displayName": "WBot 开发工具",
   "description": "为 wbot Python SDK 提供开发辅助、本地元素库管理，并发布自动化到 Assistant 或 OC。",
-  "version": "0.7.1",
-  "publisher": "xpath-studio-local",
+  "version": "0.9.0",
+  "publisher": "marswei",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
@@ -15,9 +15,11 @@
   ],
   "keywords": [
     "wbot",
+    "rpa",
     "xpath",
     "python",
-    "automation"
+    "automation",
+    "assistant"
   ],
   "main": "./extension.js",
   "extensionKind": [
@@ -25,12 +27,13 @@
   ],
   "activationEvents": [
     "onView:wbot.elements",
-    "onLanguage:python"
+    "onLanguage:python",
+    "onStartupFinished"
   ],
   "capabilities": {
     "untrustedWorkspaces": {
       "supported": false,
-      "description": "运行 Python 和启动本机服务需要受信任的工作区。"
+      "description": "访问本机 Assistant、运行 Python 和构建项目需要受信任的工作区。"
     },
     "virtualWorkspaces": {
       "supported": false,
@@ -56,17 +59,6 @@
         "title": "新建 Python 自动化脚本",
         "category": "WBot",
         "icon": "$(new-file)"
-      },
-      {
-        "command": "wbot.startBridge",
-        "title": "启动 / 连接浏览器服务",
-        "category": "WBot",
-        "icon": "$(plug)"
-      },
-      {
-        "command": "wbot.stopBridge",
-        "title": "停止本扩展启动的服务",
-        "category": "WBot"
       },
       {
         "command": "wbot.refresh",
@@ -237,6 +229,36 @@
         "title": "将元素加入项目快照",
         "category": "WBot",
         "icon": "$(archive)"
+      },
+      {
+        "command": "wbot.connectAssistant",
+        "title": "自动查找本机 Assistant",
+        "category": "WBot",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "wbot.connectOC",
+        "title": "连接 OC 平台",
+        "category": "WBot",
+        "icon": "$(cloud)"
+      },
+      {
+        "command": "wbot.manageOC",
+        "title": "管理 OC 连接",
+        "category": "WBot",
+        "icon": "$(settings-gear)"
+      },
+      {
+        "command": "wbot.disconnectOC",
+        "title": "断开 OC 平台",
+        "category": "WBot",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "wbot.refreshConnections",
+        "title": "刷新连接状态",
+        "category": "WBot",
+        "icon": "$(refresh)"
       }
     ],
     "viewsContainers": {
@@ -250,6 +272,11 @@
     },
     "views": {
       "wbot": [
+        {
+          "id": "wbot.connections",
+          "name": "连接",
+          "contextualTitle": "WBot 连接"
+        },
         {
           "id": "wbot.elements",
           "name": "元素库",
@@ -266,12 +293,12 @@
       {
         "view": "wbot.elements",
         "when": "!wbot.bridgeConnected",
-        "contents": "Python 开发辅助 · 本地元素库 · 自动化发布\n[选择 Python](command:wbot.selectPython) · [安装 wbot](command:wbot.installRuntime)\n[启动元素库服务](command:wbot.startBridge)\n[新建 Python 脚本](command:wbot.newScript) · [初始化项目](command:wbot.initProject)\n[发布自动化](command:wbot.publishPackage) · [使用指南](command:wbot.help)"
+        "contents": "Python 开发辅助 · 本地元素库 · 自动化发布\n[选择 Python](command:wbot.selectPython) · [安装 wbot](command:wbot.installRuntime)\n元素库、抓取和定位由 Assistant 提供，请先打开 Assistant。\n[新建 Python 脚本](command:wbot.newScript) · [初始化项目](command:wbot.initProject)\n[发布自动化](command:wbot.publishPackage) · [使用指南](command:wbot.help)"
       },
       {
         "view": "wbot.elements",
         "when": "wbot.bridgeConnected",
-        "contents": "浏览器服务已连接，开始添加元素。\n[从页面抓取元素](command:wbot.pick) · [手动新增](command:wbot.addElement)\n[新建 Python 脚本](command:wbot.newScript)\n[初始化项目](command:wbot.initProject)"
+        "contents": "Assistant 元素库已就绪，开始添加元素。\n[从页面抓取元素](command:wbot.pick) · [手动新增](command:wbot.addElement)\n[新建 Python 脚本](command:wbot.newScript)\n[初始化项目](command:wbot.initProject)"
       },
       {
         "view": "wbot.shared",
@@ -289,11 +316,6 @@
           "command": "wbot.buildPackage",
           "when": "view == wbot.elements",
           "group": "0_project@2"
-        },
-        {
-          "command": "wbot.startBridge",
-          "when": "view == wbot.elements",
-          "group": "navigation@1"
         },
         {
           "command": "wbot.pick",
@@ -331,11 +353,6 @@
           "group": "3_shared@1"
         },
         {
-          "command": "wbot.stopBridge",
-          "when": "view == wbot.elements",
-          "group": "4_service@1"
-        },
-        {
           "command": "wbot.refreshSharedView",
           "when": "view == wbot.shared",
           "group": "navigation@1"
@@ -369,6 +386,16 @@
           "command": "wbot.newScript",
           "when": "view == wbot.elements",
           "group": "0_project@0"
+        },
+        {
+          "command": "wbot.refreshConnections",
+          "when": "view == wbot.connections",
+          "group": "navigation@0"
+        },
+        {
+          "command": "wbot.connectOC",
+          "when": "view == wbot.connections",
+          "group": "navigation@1"
         }
       ],
       "view/item/context": [
@@ -419,29 +446,11 @@
     "configuration": {
       "title": "WBot",
       "properties": {
-        "wbot.bridgeUrl": {
-          "type": "string",
-          "default": "http://127.0.0.1:8790",
-          "scope": "machine",
-          "description": "本机浏览器服务地址，只允许 http://127.0.0.1:端口。可连接已有 XPath Studio 1.4.0。"
-        },
         "wbot.pythonPath": {
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
           "description": "Python 可执行文件路径，不含命令行参数。留空时使用 Python 扩展的当前解释器、项目 .venv 或 PATH 中的 python。"
-        },
-        "wbot.libraryPath": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "SQLite 元素库路径。留空使用 ~/.xpath_studio/elements.sqlite3。连接外部服务时应与其配置一致。"
-        },
-        "wbot.assistantStateDir": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "共享元素功能使用的 Assistant 数据目录。留空为 ~/.wbot-assistant；仅从该目录读取本机会话，OC 地址和绑定仍在 Assistant 设置中管理。"
         },
         "wbot.scriptArgs": {
           "type": "array",
@@ -450,12 +459,6 @@
           },
           "default": [],
           "description": "运行/调试当前脚本时传入的参数列表。"
-        },
-        "wbot.ocUrl": {
-          "type": "string",
-          "default": "",
-          "scope": "machine",
-          "description": "OC 管理平台 HTTPS 地址。发布使用独立开发者账号，密码仅用于本次登录。"
         }
       }
     },
@@ -468,14 +471,30 @@
   },
   "scripts": {
     "prepare-runtime": "node scripts/prepare-runtime.js",
-    "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js test/publish.test.js test/completions.test.js",
-    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.7.1.vsix"
+    "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js test/publish.test.js test/completions.test.js test/discovery.test.js test/connections.test.js",
+    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.9.0.vsix",
+    "package:marketplace": "npm run prepare-runtime && node scripts/package-marketplace.js"
   },
   "devDependencies": {
-    "@vscode/vsce": "^3.6.0"
+    "@vscode/vsce": "4.1.0"
   },
   "extensionPack": [
     "ms-python.python",
     "ms-python.vscode-pylance"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DevilHill/wbot.git",
+    "directory": "vscode-extension"
+  },
+  "homepage": "https://github.com/DevilHill/wbot/tree/main/vscode-extension",
+  "bugs": {
+    "url": "https://github.com/DevilHill/wbot/issues"
+  },
+  "icon": "assets/marketplace-icon.png",
+  "galleryBanner": {
+    "color": "#F5F7FB",
+    "theme": "light"
+  },
+  "pricing": "Free"
 }

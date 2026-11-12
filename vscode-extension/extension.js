@@ -3,7 +3,8 @@ const vscode = require('vscode');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const core = require('./src/core');
-const {BridgeManager} = require('./src/bridge');
+const {requestBrowser} = require('./src/assistant-browser');
+const {createConnections} = require('./src/connections');
 const {createProjectCommands} = require('./src/project');
 const {createPublishCommands} = require('./src/publish');
 const {registerCompletions} = require('./src/completions');
@@ -14,16 +15,17 @@ const {editElementDraft} = require('./src/element-input');
 const {assistantStateDir, requestAssistant} = require('./src/assistant-client');
 const {createSharedElementDocuments} = require('./src/shared-element-documents');
 
-let manager;
 function activate(context) {
   const output = vscode.window.createOutputChannel('WBot');
   const runtime = path.join(context.extensionPath, 'runtime');
-  manager = new BridgeManager(runtime, text => output.append(text));
   const changes = new vscode.EventEmitter();
   const elementDocuments = createSharedElementDocuments(vscode, context);
   const validations = new Map();
-  const sharedView = createSharedView(vscode, context, () => {
+  let connections, browserInfo, browserDirectory;
+  let connectionReload=Promise.resolve();
+  const sharedView = createSharedView(vscode, context, async () => {
     trusted();
+    await browserSession();
     const cfg = settings();
     return requestAssistant(assistantStateDir(cfg.assistantStateDir), 'status', {library_path:cfg.libraryPath});
   });
@@ -31,14 +33,29 @@ function activate(context) {
   registerCompletions(vscode, context, () => records);
   const settings = resource => {
     const cfg = vscode.workspace.getConfiguration('wbot', resource);
-    return {baseUrl:core.bridgeUrl(cfg.get('bridgeUrl')), libraryPath:core.libraryPath(cfg.get('libraryPath')),
-      pythonPath:cfg.get('pythonPath'), scriptArgs:cfg.get('scriptArgs', []), assistantStateDir:cfg.get('assistantStateDir')};
+    return {baseUrl:browserInfo?.bridge_url || 'http://127.0.0.1:8790', libraryPath:browserInfo?.library_path || core.libraryPath(),
+      pythonPath:cfg.get('pythonPath'), scriptArgs:cfg.get('scriptArgs', []), assistantStateDir:connections?.directory() || cfg.get('assistantStateDir')};
   };
   function trusted() {
     if (!vscode.workspace.isTrusted) throw new Error('请先将工作区设为受信任，再使用 WBot');
     if (vscode.env.remoteName) throw new Error('此版本仅支持本机 VS Code 窗口，请在本机打开项目');
   }
-  const api = (endpoint, body) => { trusted(); return core.request(settings().baseUrl, endpoint, body); };
+  connections = createConnections({vscode, context, enabled:vscode.workspace.isTrusted && !vscode.env.remoteName,
+    legacyDirectory:() => vscode.workspace.getConfiguration('wbot').get('assistantStateDir',''),
+    onAssistantChanged:() => { browserInfo=undefined; browserDirectory=undefined; generation++; records=[]; validations.clear(); changes.fire(); sharedView.invalidate(); void refresh(true); }});
+  async function browserSession() {
+    trusted();
+    await connectionReload;
+    await connections.settled();
+    const directory=connections.connectedDirectory() || await connections.requireAssistant();
+    if(!browserInfo || browserDirectory!==directory){
+      const info=await requestBrowser(directory);
+      if(connections.directory()!==directory)throw new Error('Assistant 已切换，请重试');
+      browserInfo=info;browserDirectory=directory;
+    }
+    return directory;
+  }
+  const api = async (endpoint, body) => requestBrowser(await browserSession(),endpoint,body);
   const provider = {
     onDidChangeTreeData:changes.event,
     getChildren(node) {
@@ -58,8 +75,6 @@ function activate(context) {
     }
   };
   const view = vscode.window.createTreeView('wbot.elements', {treeDataProvider:provider, showCollapseAll:true});
-  const status = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left, 12);
-  status.text = '$(plug) WBot'; status.tooltip = '启动 / 连接 WBot 浏览器服务'; status.command = 'wbot.startBridge'; status.show();
   async function refresh(silent = false) {
     const current = ++generation;
     try {
@@ -68,13 +83,13 @@ function activate(context) {
       if (current !== generation) return;
       records = data.items; view.message = query ? `搜索：${query}` : `${records.length} 个元素`;
       vscode.commands.executeCommand('setContext', 'wbot.bridgeConnected', true);
-      status.text = '$(check) WBot 浏览器'; view.description = '已连接'; changes.fire();
+      view.description = 'Assistant'; changes.fire();
       return records;
     } catch (error) {
       if (current !== generation) return;
       vscode.commands.executeCommand('setContext', 'wbot.bridgeConnected', false);
-      records = []; view.message = '服务未连接；点击插头图标启动。'; view.description = '离线';
-      status.text = '$(plug) WBot'; changes.fire();
+      records = []; view.message = error.message; view.description = 'Assistant 未就绪';
+      changes.fire();
       if (!silent) throw error;
     }
   }
@@ -105,10 +120,11 @@ function activate(context) {
       {placeHolder:'选择元素',matchOnDescription:true,matchOnDetail:true}))?.record;
   }
   async function editRecord(original = {}) {
+    await browserSession();
     const source = settings();
     return editElementDraft(vscode, original, async record => {
       const current = settings();
-      if (current.baseUrl !== source.baseUrl || current.libraryPath !== source.libraryPath) throw new Error('元素库连接已改变，请关闭表单后重新编辑');
+      if (current.assistantStateDir !== source.assistantStateDir || current.baseUrl !== source.baseUrl || current.libraryPath !== source.libraryPath) throw new Error('元素库连接已改变，请关闭表单后重新编辑');
       const result = await api('/api/elements/save', {record});
       await refresh(); return result.item;
     });
@@ -122,11 +138,6 @@ function activate(context) {
     }
     // 插入普通文本，防止元素名称中的 $ 被解释为代码片段占位符。
     await editor.edit(edit => edit.replace(editor.selection, code));
-  }
-  async function start() {
-    const result = await manager.start(await pythonExecutable(vscode.window.activeTextEditor?.document.uri), settings());
-    output.appendLine(result.owned ? '本扩展的浏览器服务已启动。' : '已连接现有 XPath Studio 服务（不会停止外部服务）。');
-    await refresh(); return result;
   }
   async function saveLastPick() { const {payload} = await api('/api/bridge/last'); return editRecord(core.pickedRecord(payload)); }
   async function pick() {
@@ -188,13 +199,7 @@ function activate(context) {
     return vscode.tasks.executeTask(task);
   }
   async function prepareBrowserExtension() {
-    // 释放到稳定全局目录，仅修改副本端口，不改打包资源或用户的浏览器配置。
-    const dest = path.join(context.globalStorageUri.fsPath,'browser-extension');
-    await fs.mkdir(dest,{recursive:true});
-    await fs.cp(path.join(runtime,'extension'),dest,{recursive:true});
-    const file = path.join(dest,'background.js');
-    const source = await fs.readFile(file,'utf8');
-    await fs.writeFile(file,source.replace('var DEFAULT_BRIDGE = "http://127.0.0.1:8790";',`var DEFAULT_BRIDGE = ${JSON.stringify(settings().baseUrl)};`));
+    const {directory:dest}=await api('/api/extension/prepare');
     await vscode.env.clipboard.writeText(dest);
     await vscode.commands.executeCommand('revealFileInOS',vscode.Uri.file(path.join(dest,'manifest.json')));
     vscode.window.showInformationMessage('目录已复制。请到 chrome://extensions 或 edge://extensions 开启开发者模式，加载此目录；更新后重新加载扩展并刷新网页。');
@@ -212,7 +217,12 @@ function activate(context) {
   const projectCommands = createProjectCommands({vscode, runtime, output, pythonExecutable});
   const handlers = {
     ...projectCommands,
-    ...createPublishCommands({vscode, context, runtime, pythonExecutable, settings, buildPackage:projectCommands.buildPackage, exportElements:async () => (await api('/api/elements/export')).data}),
+    connectAssistant:() => connections.connectAssistant(),
+    connectOC:() => connections.connectOC(),
+    manageOC:() => connections.manageOC(),
+    disconnectOC:() => connections.disconnectOC(),
+    refreshConnections:() => connections.refresh(),
+    ...createPublishCommands({vscode, context, runtime, pythonExecutable, settings, connections, buildPackage:projectCommands.buildPackage, exportElements:async () => (await api('/api/elements/export')).data}),
     ...createSharedElementCommands({vscode, context, settings, refresh, onStatus:sharedView.update}),
     refreshSharedView:() => sharedView.refresh(),
     elementDetails:async node => {
@@ -220,8 +230,6 @@ function activate(context) {
       const checked = validations.get(record.id);
       return elementDocuments.status({名称:record.name, 分组:record.group, XPath:record.xpath, 页面:record.url, 描述:record.description, 框架:record.frame, 最近验证:checked?.xpath === record.xpath ? checked : '尚未验证；可通过元素右键菜单校验并高亮'}, '元素详情');
     },
-    startBridge:start, stopBridge:async () => { const stopped = await manager.stop(); await refresh(true);
-      vscode.window.showInformationMessage(stopped ? '已停止本扩展启动的服务' : '没有本扩展启动的服务；外部服务保持运行'); },
     refresh:() => refresh(), pick, saveLastPick, addElement:() => editRecord(),
     editElement:async node => { const record = await chooseElement(node); if (record) return editRecord(record); },
     deleteElement:async node => { const record = await chooseElement(node); if (!record) return;
@@ -254,17 +262,20 @@ function activate(context) {
   };
   for (const [name, handler] of Object.entries(handlers)) {
     context.subscriptions.push(vscode.commands.registerCommand('wbot.'+name, async (...args) => {
-      try { trusted(); const result = await handler(...args);
+      try { trusted();
+        if (['sharedElements','connectSharedElements','sharedElementChanges','commitSharedElements','requestElementMerge','sharedElementStatus','pullSharedElements'].includes(name)) { await connections.requireAssistant(); await browserSession(); }
+        const result = await handler(...args);
         if (['connectSharedElements','commitSharedElements','requestElementMerge','pullSharedElements','addElement','editElement','deleteElement','importElements','pick'].includes(name)) sharedView.refresh();
         return result; }
       catch (error) { output.appendLine(error.stack || String(error)); vscode.window.showErrorMessage('WBot: '+error.message); return undefined; }
     }));
   }
-  context.subscriptions.push(output,view,status,changes,{dispose:() => manager.dispose()},
-    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('wbot')) { validations.clear(); sharedView.invalidate(); refresh(true); sharedView.refresh(); } }));
+  context.subscriptions.push(output,view,changes,
+    view.onDidChangeVisibility(event => { if (event.visible && vscode.workspace.isTrusted && !vscode.env.remoteName) void refresh().catch(error => { view.message = error.message; }); }),
+    vscode.workspace.onDidChangeConfiguration(event => { if (event.affectsConfiguration('wbot.assistantStateDir')) { validations.clear(); sharedView.invalidate(); connectionReload=connections.reload(); void connectionReload.then(() => { void refresh(true); void sharedView.refresh(); }).catch(error=>output.appendLine(error.message)); } }));
   if (vscode.workspace.isTrusted && !vscode.env.remoteName) { refresh(true); sharedView.refresh(); }
   // 供集成测试与其他扩展只读查看状态；不添加隐藏的执行命令。
-  return {refresh, getElements:() => structuredClone(records), provider, sharedView, bridge:manager};
+  return {refresh, getElements:() => structuredClone(records), provider, sharedView, connectionView:connections.provider, connectionReady:connections.ready, refreshConnections:connections.refresh};
 }
-async function deactivate() { if (manager) await manager.stop(); }
+function deactivate() {}
 module.exports = {activate,deactivate};

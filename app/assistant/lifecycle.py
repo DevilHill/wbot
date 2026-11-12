@@ -167,6 +167,10 @@ def serve(state_dir, port=8791):
         metadata_path = state_dir / METADATA_FILE
         try:
             server = create_server(execution, port, connection)
+            try:
+                execution.browser_url = server.browser.start()["bridge_url"]
+            except RuntimeError as exc:
+                print(str(exc), file=sys.stderr, flush=True)
             connection.start()
             metadata = {"url": server.origin, "pid": os.getpid(), "token": server.token}
             pending = metadata_path.with_suffix(".tmp")

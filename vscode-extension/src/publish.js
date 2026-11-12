@@ -5,7 +5,7 @@ const {randomBytes} = require('node:crypto');
 const {selectProjectFolder,runProjectCommand} = require('./project');
 const {ocOrigin,publishAssistant,publishOC} = require('./publish-client');
 
-function createPublishCommands({vscode,context,runtime,pythonExecutable,settings,buildPackage,exportElements}) {
+function createPublishCommands({vscode,context,runtime,pythonExecutable,connections,buildPackage,exportElements}) {
   let publishing=false;
   async function publishPackage() {
     if(publishing)throw new Error('已有发布正在进行');
@@ -13,6 +13,8 @@ function createPublishCommands({vscode,context,runtime,pythonExecutable,settings
     try {
       const target=await vscode.window.showQuickPick([{label:'Assistant · 本机托管',value:'assistant',description:'安装到我的自动化，关闭 VS Code 后仍可运行'},{label:'OC · 企业包仓库',value:'oc',description:'上传版本，部署和调度在 OC 单独操作'}],{title:'发布自动化 · 选择目标'});
       if(!target)return;
+      const destination=target.value==='oc'?await connections.requireOC():await connections.requireAssistant();
+      if(!destination)return;
       const source=await vscode.window.showQuickPick([{label:'构建并发布当前项目',value:'build'},{label:'发布已有版本包',value:'existing',description:'重试或分发已经构建的不可变版本'}],{title:'选择发布内容'});
       if(!source)return;
       let built;
@@ -22,20 +24,18 @@ function createPublishCommands({vscode,context,runtime,pythonExecutable,settings
         built={path:files[0].fsPath,manifest:await runProjectCommand({python:await pythonExecutable(files[0]),runtime,action:'inspect',project:files[0].fsPath})};
       }
       if(!built)return;
-      let origin='',credentials;
+      const origin=target.value==='oc'?ocOrigin(destination.origin):'';
+      let credentials;
       if(target.value==='oc'){
-        const configured=vscode.workspace.getConfiguration('wbot').get('ocUrl','');
-        const value=await vscode.window.showInputBox({title:'OC 管理平台地址',value:configured,placeHolder:'https://rpa.marswei.fun',validateInput:value=>{try{ocOrigin(value);}catch(error){return error.message;}}});if(value===undefined)return;
-        origin=ocOrigin(value);
-        const username=await vscode.window.showInputBox({title:'OC 开发者账号',ignoreFocusOut:true});if(!username)return;
-        const password=await vscode.window.showInputBox({title:'OC 登录密码（仅本次发布使用）',password:true,ignoreFocusOut:true});if(password===undefined)return;
+        const username=await vscode.window.showInputBox({title:'OC 发布授权 · 开发者账号',prompt:'目标地址来自 Assistant 的已批准绑定；上传包需要开发者账号权限。',ignoreFocusOut:true});if(!username)return;
+        const password=await vscode.window.showInputBox({title:'OC 发布授权 · 密码（仅本次发布使用）',password:true,ignoreFocusOut:true});if(password===undefined)return;
         credentials={username,password};
       }
       const record={id:randomBytes(12).toString('hex'),name:built.manifest.name,version:built.manifest.version,target:target.value,origin,path:built.path,time:new Date().toISOString(),state:'pending'};
       const history=context.globalState.get('wbot.publications',[]);await context.globalState.update('wbot.publications',[record,...history].slice(0,100));
       let installed;
       try {
-        installed=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:`发布 ${record.name} ${record.version} → ${target.value==='oc'?'OC':'Assistant'}`},()=>target.value==='oc'?publishOC(origin,credentials,built):publishAssistant(settings().assistantStateDir,built));
+        installed=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:`发布 ${record.name} ${record.version} → ${target.value==='oc'?'OC':'Assistant'}`},()=>target.value==='oc'?publishOC(origin,credentials,built):publishAssistant(destination,built));
         record.state='published';record.packageId=installed.id;
       } catch(error) {record.state='unconfirmed';record.error=error.message;throw error;}
       finally {

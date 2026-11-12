@@ -20,7 +20,7 @@ async function readSession(directory) {
     if ((await fs.stat(filename)).size > 16384) throw new Error('Assistant 服务记录过大');
     metadata = JSON.parse(await fs.readFile(filename, 'utf8'));
   } catch (error) {
-    if (error.code === 'ENOENT') throw new Error('未找到 Assistant 后台；请先启动，并确认 wbot.assistantStateDir 指向其数据目录');
+    if (error.code === 'ENOENT') throw new Error('未发现正在运行的 Assistant，请先打开 Assistant，插件会自动连接');
     throw new Error('无法读取 Assistant 服务记录：' + error.message);
   }
   if (!metadata || typeof metadata !== 'object') throw new Error('Assistant 服务记录格式无效');
@@ -42,7 +42,7 @@ async function requestAssistant(directory, action, body = {}, timeout = 30000) {
       method:'POST', headers:{'X-WBot-Token':token, 'Content-Type':'application/json', 'Content-Length':content.length}
     }, response => {
       if (response.statusCode >= 300 && response.statusCode < 400) {
-        response.resume(); reject(new Error('Assistant 返回重定向，未转发本机会话；请检查数据目录')); return;
+        response.resume(); reject(new Error('Assistant 返回重定向，未转发本机会话；请重新打开 Assistant')); return;
       }
       let size = 0;
       const chunks = [];
@@ -54,7 +54,7 @@ async function requestAssistant(directory, action, body = {}, timeout = 30000) {
       response.on('error', reject);
       response.on('end', () => {
         if (response.statusCode === 404) {
-          reject(new Error('共享元素接口不可用，请更新并重启 Assistant 后台，确认数据目录正确')); return;
+          reject(new Error('共享元素接口不可用，请更新并重启 Assistant 后台，再刷新连接状态')); return;
         }
         let payload;
         try { payload = JSON.parse(Buffer.concat(chunks).toString('utf8')); }

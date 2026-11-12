@@ -1,0 +1,75 @@
+name: Publish VS Code extension
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact package.json version to publish
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: vscode-marketplace
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.ref == 'refs/heads/main'
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: vscode-extension/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Verify selected version
+        working-directory: vscode-extension
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: node -e "const p=require('./package.json');if(p.version!==process.env.RELEASE_VERSION)throw Error('Selected version does not match package.json')"
+      - name: Build Python SDK
+        run: |
+          python -m pip install .
+          python -m pip wheel . --no-deps --wheel-dir dist/wbot
+      - name: Install packaging tools
+        working-directory: vscode-extension
+        run: npm ci
+      - name: Prepare and test extension
+        working-directory: vscode-extension
+        run: |
+          npm run prepare-runtime
+          $env:WBOT_TEST_PYTHON = (Get-Command python).Source
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Package Marketplace VSIX
+        working-directory: vscode-extension
+        run: npm run package:marketplace
+      - name: Verify VSIX contents
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem dist/marketplace/*.vsix
+          if ($package.Count -ne 1) { throw 'Expected exactly one VSIX' }
+          python -X utf8 vscode-extension/scripts/verify-package.py $package.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vscode-marketplace
+          path: dist/marketplace/*.vsix
+          if-no-files-found: error
+      - name: Publish verified package with Marketplace OIDC
+        working-directory: vscode-extension
+        shell: pwsh
+        run: |
+          $package = Get-ChildItem ../dist/marketplace/*.vsix
+          & node_modules/.bin/vsce.cmd publish --oidc --packagePath $package.FullName
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

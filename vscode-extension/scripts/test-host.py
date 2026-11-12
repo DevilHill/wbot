@@ -58,6 +58,7 @@ if args.debugger_extension:
     copy_extension(debugger_dir, debugger_manifest)
     print('隔离调试扩展：' + ', '.join(sorted(copied)), flush=True)
 env = dict(os.environ, WBOT_TEST_PYTHON=str(Path(args.python).resolve()))
+env['WBOT_TEST_SETTINGS_FILE'] = str(run_dir / 'user-data' / 'User' / 'settings.json')
 env['WBOT_TEST_DEBUGGER'] = '1' if args.debugger_extension else '0'
 env.pop('ELECTRON_RUN_AS_NODE', None)
 env.pop('VSCODE_IPC_HOOK_CLI', None)

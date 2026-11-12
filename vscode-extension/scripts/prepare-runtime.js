@@ -1,5 +1,5 @@
 'use strict';
-// 编码版打包 Python API、浏览器桥与拾取扩展，不包含桌面工作台。
+// 插件只携带项目构建工具和 SDK；元素服务及浏览器扩展由 Assistant 提供。
 const fs = require('node:fs');
 const path = require('node:path');
 const extension = path.resolve(__dirname, '..');
@@ -26,11 +26,10 @@ function copyTree(source, target, filter, directoryFilter = () => true) {
     else if (entry.isFile() && filter(entry.name)) fs.copyFileSync(src, out);
   }
 }
-copyTree(path.join(root, 'app'), path.join(dest, 'app'), name => name.endsWith('.py'), name => name !== 'web');
+fs.mkdirSync(path.join(dest,'app'),{recursive:true});
+for(const name of ['__init__.py','automation_package.py','processes.py'])fs.copyFileSync(path.join(root,'app',name),path.join(dest,'app',name));
 copyTree(path.join(root, 'wbot'), path.join(dest, 'wbot'), name => name.endsWith('.py') || name === 'py.typed');
-copyTree(path.join(root, 'extension'), path.join(dest, 'extension'), name => /\.(js|json|html|png|svg)$/.test(name));
-fs.copyFileSync(path.join(__dirname, 'bridge_server.py'), path.join(dest, 'bridge_server.py'));
 fs.mkdirSync(path.join(dest, 'wheels'), {recursive:true});
 fs.copyFileSync(wheel, path.join(dest, 'wheels/wbot-0.1.1-py3-none-any.whl'));
 fs.copyFileSync(path.join(root, 'LICENSE'), path.resolve(__dirname, '../LICENSE'));
-console.log('已准备编码版浏览器服务、wbot 和拾取扩展运行资源');
+console.log('已准备项目构建工具和 wbot SDK，元素服务由 Assistant 托管');

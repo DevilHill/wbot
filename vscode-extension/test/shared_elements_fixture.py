@@ -1,5 +1,6 @@
 """供 Node 客户端验收使用的隔离 Assistant 与 OC 实例。"""
 import json
+import os
 from pathlib import Path
 import sys
 import threading
@@ -30,7 +31,7 @@ def main():
     web.mkdir()
     (web / 'index.html').write_text('<title>Shared elements API fixture</title>', encoding='utf-8')
     management = oc_server(oc, web, port=0)
-    assistant = assistant_server(execution, connection=connection)
+    assistant = assistant_server(execution, connection=connection, browser_port=0, library_path=directory / 'elements.sqlite3')
     servers = [gateway, management, assistant]
     threads = [threading.Thread(target=server.serve_forever, daemon=True) for server in servers]
     for thread in threads:
@@ -40,7 +41,7 @@ def main():
         connection.synchronize()
         oc.agents.decide(identity['device_id'], 'approve')
         connection.synchronize()
-        metadata = {'url': assistant.origin, 'token': assistant.token}
+        metadata = {'url': assistant.origin, 'token': assistant.token, 'pid': os.getpid()}
         (directory / 'assistant' / 'service.json').write_text(json.dumps(metadata), encoding='utf-8')
         repository = oc.elements.create_repository({'name': '集成测试共享页面', 'request_id': uuid4().hex,
             'items': [{'id': 'search', 'name': '搜索框', 'group': '首页', 'xpath': '//input',

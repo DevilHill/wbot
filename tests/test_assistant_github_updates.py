@@ -39,7 +39,7 @@ class GitHubUpdateTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
-        self.root = Path(self.temp.name)
+        self.root = Path(self.temp.name).resolve()
         self.archive = release_zip(self.root / ARCHIVE_NAME, version='99.0.0')
         self.manifest = dict(inspect_release(self.archive), asset_name=ARCHIVE_NAME,
                              size=self.archive.stat().st_size, sha256=file_digest(self.archive))

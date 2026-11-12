@@ -17,7 +17,7 @@ function parseAssistantProcesses(rows) {
 async function assistantProcesses() {
   if (process.platform !== 'win32') return [];
   const command = "$ErrorActionPreference='Stop'; [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); @(Get-CimInstance Win32_Process -Filter \"Name = 'python.exe' OR Name = 'pythonw.exe'\" | Where-Object { $_.CommandLine -match '\\s-m\\s+app\\.assistant\\s+serve(?:\\s|$)' } | Select-Object ProcessId,CommandLine) | ConvertTo-Json -Compress";
-  const {stdout} = await promisify(execFile)('powershell.exe', ['-NoProfile','-NonInteractive','-Command',command], {windowsHide:true,timeout:6000,maxBuffer:128*1024,encoding:'utf8'});
+  const {stdout} = await promisify(execFile)('powershell.exe', ['-NoProfile','-NonInteractive','-Command',command], {windowsHide:true,timeout:15000,maxBuffer:128*1024,encoding:'utf8'});
   return parseAssistantProcesses(JSON.parse(stdout.trim() || '[]'));
 }
 function processAlive(pid) {
@@ -48,4 +48,4 @@ async function discoverAssistants({directories=[assistantStateDir()], processes,
   }));
   return results.filter(Boolean);
 }
-module.exports = {parseAssistantProcesses, discoverAssistants};
+module.exports = {parseAssistantProcesses, assistantProcesses, discoverAssistants};

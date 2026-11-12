@@ -5,7 +5,7 @@ const fs=require('node:fs/promises');
 const os=require('node:os');
 const path=require('node:path');
 const http=require('node:http');
-const {parseAssistantProcesses,discoverAssistants}=require('../src/assistant-discovery');
+const {parseAssistantProcesses,assistantProcesses,discoverAssistants}=require('../src/assistant-discovery');
 
 test('仅识别 Assistant serve 进程，支持有空格的数据目录',()=>{
  const rows=parseAssistantProcesses([{ProcessId:123,CommandLine:'"C:\\Python\\python.exe" -m app.assistant serve --state-dir "D:\\My Data\\assistant" --port 0'},{ProcessId:124,CommandLine:'python unrelated.py --state-dir C:\\wrong'},{ProcessId:125,CommandLine:'python -m app.assistant open --state-dir C:\\wrong'}]);
@@ -29,7 +29,7 @@ test('从真实 Windows 进程发现自定义目录的 Assistant，退出后不�
  const {spawn}=require('node:child_process');
  const {once}=require('node:events');
  const {send}=require('../src/publish-client');
- const directory=await fs.mkdtemp(path.join(os.tmpdir(),'wbot auto discovery '));
+ const directory=await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(),'wbot auto discovery ')));
  const child=spawn(process.env.WBOT_TEST_PYTHON,['-X','utf8','-m','app.assistant','serve','--state-dir',directory,'--port','0'],{cwd:path.resolve(__dirname,'../..'),windowsHide:true,env:{...process.env,WBOT_BROWSER_PORT:'0'},stdio:['ignore','pipe','pipe']});
  let errors='';child.stderr.on('data',chunk=>{errors+=chunk;});
  t.after(async()=>{if(child.exitCode===null){const closed=once(child,'close');child.kill();await closed;}await fs.rm(directory,{recursive:true,force:true});});
@@ -37,7 +37,9 @@ test('从真实 Windows 进程发现自定义目录的 Assistant，退出后不�
  const deadline=Date.now()+10000;
  while(Date.now()<deadline){try{metadata=JSON.parse(await fs.readFile(path.join(directory,'service.json'),'utf8'));break;}catch{}if(child.exitCode!==null)throw new Error(errors);await new Promise(resolve=>setTimeout(resolve,50));}
  assert.ok(metadata,'Assistant must become ready');
- const found=await discoverAssistants({directories:[]});
+ const processes=await assistantProcesses();
+ assert.ok(processes.some(item=>item.pid===metadata.pid),'CIM must report the live Assistant PID');
+ const found=await discoverAssistants({directories:[],processes});
  assert.ok(found.some(item=>item.directory===directory && item.pid===metadata.pid));
  const closed=once(child,'close');
  await send(metadata.url,'/api/service/stop',{method:'POST',headers:{'X-WBot-Token':metadata.token,'Content-Type':'application/json'},body:{}});

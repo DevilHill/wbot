@@ -10,9 +10,10 @@ function completionContext(source,line) {
 async function projectElements(directory) {
   let manifest;try{const file=path.join(directory,'wbot.json');if((await fs.stat(file)).size>262144)return [];manifest=JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code==='ENOENT' || error instanceof SyntaxError)return [];throw error;}
   if(typeof manifest.elements!=='string')return [];
-  const root=await fs.realpath(directory),candidate=path.resolve(directory,manifest.elements);
-  const relative=path.relative(root,candidate);if(relative.startsWith('..') || path.isAbsolute(relative))return [];
+  const project=path.resolve(directory),candidate=path.resolve(project,manifest.elements);
+  const relative=path.relative(project,candidate);if(relative.startsWith('..') || path.isAbsolute(relative))return [];
   let real;try{real=await fs.realpath(candidate);}catch(error){if(error.code==='ENOENT')return [];throw error;}
+  const root=await fs.realpath(project);
   const realRelative=path.relative(root,real);if(realRelative.startsWith('..') || path.isAbsolute(realRelative) || (await fs.stat(real)).size>2*1024*1024)return [];
   const data=JSON.parse(await fs.readFile(real,'utf8'));return data.format==='wbot-elements' && Array.isArray(data.items)?data.items:[];
 }

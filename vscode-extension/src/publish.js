@@ -15,6 +15,8 @@ function createPublishCommands({vscode,context,runtime,pythonExecutable,connecti
       if(!target)return;
       const destination=target.value==='oc'?await connections.requireOC():await connections.requireAssistant();
       if(!destination)return;
+      const connectionDirectory=connections.connectedDirectory();
+      const connectionRevision=connections.revision();
       const source=await vscode.window.showQuickPick([{label:'构建并发布当前项目',value:'build'},{label:'发布已有版本包',value:'existing',description:'重试或分发已经构建的不可变版本'}],{title:'选择发布内容'});
       if(!source)return;
       let built;
@@ -35,7 +37,10 @@ function createPublishCommands({vscode,context,runtime,pythonExecutable,connecti
       const history=context.globalState.get('wbot.publications',[]);await context.globalState.update('wbot.publications',[record,...history].slice(0,100));
       let installed;
       try {
-        installed=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:`发布 ${record.name} ${record.version} → ${target.value==='oc'?'OC':'Assistant'}`},()=>target.value==='oc'?publishOC(origin,credentials,built):publishAssistant(destination,built));
+        installed=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:`发布 ${record.name} ${record.version} → ${target.value==='oc'?'OC':'Assistant'}`},()=>{
+          connections.assertCurrent(connectionDirectory,connectionRevision);
+          return target.value==='oc'?publishOC(origin,credentials,built):publishAssistant(destination,built);
+        });
         record.state='published';record.packageId=installed.id;
       } catch(error) {record.state='unconfirmed';record.error=error.message;throw error;}
       finally {

@@ -1,6 +1,6 @@
 # WBot 开发工具
 
-**WBot 开发工具 0.9.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
+**WBot 开发工具 0.9.1** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
 
 支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可直接发布到 Assistant 或 OC，使用说明见[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md)。默认普通脚本演示文本替换与日志，无需启动浏览器。
 
@@ -36,7 +36,7 @@ OC 连接与 Assistant 绑定一致，不另建插件账号连接。Key 只提�
 
 ## 安装与首次使用
 
-1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.9.0.vsix`。正式 Marketplace 版本与本地测试版属于不同扩展身份，请避免同时启用。
+1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.9.1.vsix`。正式 Marketplace 版本与本地测试版属于不同扩展身份，请避免同时启用。
 2. 打开本机项目文件夹，并将工作区设为受信任。需要 VS Code **1.90+** 和 Python **3.10+**。
 3. 打开左侧 **WBot**，执行 **选择 Python 解释器**，选择项目环境中的 `python.exe`。留空时依次使用 Microsoft Python 扩展当前解释器、项目 `.venv` 或 PATH 中的 `python`。
 4. 执行 **WBot: 将 wbot 安装到所选 Python 环境**，等待终端显示安装成功。VSIX 内置 wbot wheel，安装 `lxml` 依赖可能需要网络。
@@ -160,7 +160,7 @@ npm run package
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
 ```
 
-产物为仓库 `dist/wbot-studio-0.9.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目构建工具、wbot 及其 wheel；浏览器桥与抓取扩展由 Assistant 提供，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) 启动；VSIX 不作为 Assistant 桌面安装包。
+产物为仓库 `dist/wbot-studio-0.9.1.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目构建工具、wbot 及其 wheel；浏览器桥与抓取扩展由 Assistant 提供，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) 启动；VSIX 不作为 Assistant 桌面安装包。
 
 `npm test` 运行插件与 Assistant 元素服务通信回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
 
@@ -190,3 +190,5 @@ npm run package
 - 回执中的包名、版本、标识匹配后才标为成功。网络异常显示“未确认”，先核对目标包列表；不会自动重放上传。
 - **WBot: 查看发布记录** 保存最近 100 次的目标、版本、产物路径和回执，不保存密码、Cookie 或设备凭据。
 - 发布到 OC 后，由管理端选择 Robot / Environment 部署流程并配置任务调度。发布、部署、运行是三个独立操作。
+
+连接侧栏的「本机 Assistant」行提供 **重新连接** 和 **断开** 按钮，也可点击该行选择操作。断开只暂停此 VS Code 插件的自动连接，Assistant 后台任务和 OC 绑定继续运行；重新打开 VS Code 后仍保持断开，需主动点击重新连接。重连会重新发现服务并刷新元素库与 OC 状态。

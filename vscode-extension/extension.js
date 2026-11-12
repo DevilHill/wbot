@@ -42,15 +42,16 @@ function activate(context) {
   }
   connections = createConnections({vscode, context, enabled:vscode.workspace.isTrusted && !vscode.env.remoteName,
     legacyDirectory:() => vscode.workspace.getConfiguration('wbot').get('assistantStateDir',''),
-    onAssistantChanged:() => { browserInfo=undefined; browserDirectory=undefined; generation++; records=[]; validations.clear(); changes.fire(); sharedView.invalidate(); void refresh(true); }});
+    onAssistantChanged:() => { browserInfo=undefined; browserDirectory=undefined; generation++; records=[]; validations.clear(); changes.fire(); sharedView.invalidate(); void refresh(true).then(() => sharedView.refresh()); }});
   async function browserSession() {
     trusted();
     await connectionReload;
     await connections.settled();
     const directory=connections.connectedDirectory() || await connections.requireAssistant();
     if(!browserInfo || browserDirectory!==directory){
+      const current=connections.revision();
       const info=await requestBrowser(directory);
-      if(connections.directory()!==directory)throw new Error('Assistant 已切换，请重试');
+      connections.assertCurrent(directory,current);
       browserInfo=info;browserDirectory=directory;
     }
     return directory;
@@ -217,13 +218,22 @@ function activate(context) {
   const projectCommands = createProjectCommands({vscode, runtime, output, pythonExecutable});
   const handlers = {
     ...projectCommands,
+    disconnectAssistant:() => connections.disconnectAssistant(),
+    reconnectAssistant:async () => { await connections.reconnectAssistant(); await refresh(true); await sharedView.refresh(); },
+    manageAssistant:() => connections.manageAssistant(),
     connectAssistant:() => connections.connectAssistant(),
     connectOC:() => connections.connectOC(),
     manageOC:() => connections.manageOC(),
     disconnectOC:() => connections.disconnectOC(),
     refreshConnections:() => connections.refresh(),
     ...createPublishCommands({vscode, context, runtime, pythonExecutable, settings, connections, buildPackage:projectCommands.buildPackage, exportElements:async () => (await api('/api/elements/export')).data}),
-    ...createSharedElementCommands({vscode, context, settings, refresh, onStatus:sharedView.update}),
+    ...createSharedElementCommands({vscode, context, settings, refresh, request:async (directory,action,body) => {
+      connections.assertCurrent(directory);
+      const current=connections.revision();
+      const result=await requestAssistant(directory,action,body);
+      connections.assertCurrent(directory,current);
+      return result;
+    }, onStatus:sharedView.update}),
     refreshSharedView:() => sharedView.refresh(),
     elementDetails:async node => {
       const record = await chooseElement(node); if (!record) return;

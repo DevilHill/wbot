@@ -62,7 +62,7 @@ function createSharedView(vscode, context, readStatus) {
   const timer = setInterval(() => { if (view.visible) refresh(); }, 15000);
   context.subscriptions.push(view, changes, view.onDidChangeVisibility(event => { if (event.visible) refresh(); }),
     {dispose() { disposed = true; generation++; clearInterval(timer); }});
-  return {refresh, update, invalidate() { generation++; state = null; view.message = '连接配置已更改，请刷新'; changes.fire(); }, provider};
+  return {refresh, update, invalidate() { generation++; state = null; view.description = ''; view.message = '连接配置已更改，请刷新'; changes.fire(); }, provider};
 }
 
 module.exports = {nextActions, createSharedView};

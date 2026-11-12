@@ -2,7 +2,7 @@
   "name": "wbot-studio",
   "displayName": "WBot 开发工具",
   "description": "为 wbot Python SDK 提供开发辅助、本地元素库管理，并发布自动化到 Assistant 或 OC。",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "publisher": "marswei",
   "license": "MIT",
   "engines": {
@@ -259,6 +259,24 @@
         "title": "刷新连接状态",
         "category": "WBot",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "wbot.disconnectAssistant",
+        "title": "断开 Assistant",
+        "category": "WBot",
+        "icon": "$(debug-disconnect)"
+      },
+      {
+        "command": "wbot.reconnectAssistant",
+        "title": "重新连接 Assistant",
+        "category": "WBot",
+        "icon": "$(debug-restart)"
+      },
+      {
+        "command": "wbot.manageAssistant",
+        "title": "管理 Assistant 连接",
+        "category": "WBot",
+        "icon": "$(plug)"
       }
     ],
     "viewsContainers": {
@@ -428,6 +446,26 @@
           "command": "wbot.copyXPath",
           "when": "view == wbot.elements && viewItem == wbot.element",
           "group": "inline@3"
+        },
+        {
+          "command": "wbot.disconnectAssistant",
+          "when": "view == wbot.connections && viewItem == wbot.connection.assistant.connected",
+          "group": "inline@2"
+        },
+        {
+          "command": "wbot.reconnectAssistant",
+          "when": "view == wbot.connections && viewItem == wbot.connection.assistant.connected",
+          "group": "inline@1"
+        },
+        {
+          "command": "wbot.reconnectAssistant",
+          "when": "view == wbot.connections && viewItem == wbot.connection.assistant.paused",
+          "group": "inline@1"
+        },
+        {
+          "command": "wbot.reconnectAssistant",
+          "when": "view == wbot.connections && viewItem == wbot.connection.assistant.offline",
+          "group": "inline@1"
         }
       ],
       "editor/title": [
@@ -472,7 +510,7 @@
   "scripts": {
     "prepare-runtime": "node scripts/prepare-runtime.js",
     "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js test/publish.test.js test/completions.test.js test/discovery.test.js test/connections.test.js",
-    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.9.0.vsix",
+    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.9.1.vsix",
     "package:marketplace": "npm run prepare-runtime && node scripts/package-marketplace.js"
   },
   "devDependencies": {

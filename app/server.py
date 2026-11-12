@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
+from wbot import __version__ as wbot_version
 from . import __version__, ai_client, extension_installer, ws_bridge, xpath_engine
 
 # --------------------------------------------------------------------------- #
@@ -247,7 +248,7 @@ class Handler(BaseHTTPRequestHandler):
             self._handle_ws()
             return
         if path == "/api/health":
-            self._send_json({"ok": True, "version": __version__, "wbot": "0.1.0", "bridge": ws_bridge.HUB.stats()})
+            self._send_json({"ok": True, "version": __version__, "wbot": wbot_version, "bridge": ws_bridge.HUB.stats()})
             return
         if path == "/api/bridge/last":
             self._send_json({"ok": True, "payload": ws_bridge.HUB.last_pick})

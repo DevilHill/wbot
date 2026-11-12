@@ -20,7 +20,7 @@ test('真实桥接子进程：持久化、导入导出、复用与进程清理',
   t.after(async () => { await external.stop(); await manager.stop(); await fs.rm(temp,{recursive:true,force:true}); });
   const started = await manager.start(process.env.WBOT_TEST_PYTHON || 'python',cfg);
   assert.equal(started.owned,true);
-  assert.equal(started.health.wbot,'0.1.0');
+  assert.equal(started.health.wbot,'0.1.1');
   const record = {name:'搜索框',group:'首页',xpath:'//input[@id="q"]',url:'https://example.com'};
   const saved = await request(cfg.baseUrl,'/api/elements/save',{record});
   const items = (await request(cfg.baseUrl,'/api/elements')).items;

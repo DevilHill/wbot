@@ -71,6 +71,7 @@ class SettingsPageTests(unittest.TestCase):
         page.client = connection
         page.server_url.setText('https://new.example.test')
         page.device_name.setText('开发电脑')
+        page.binding_key.setText('wbot_' + 'a' * 43)
         page.connect_service()
         self.assertTrue(page.busy)
         page.back_button.click()

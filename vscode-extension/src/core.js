@@ -20,7 +20,7 @@ function pyString(value) { return JSON.stringify(String(value)).replace(/\u2028/
 function elementCode(record, options) {
   return 'from wbot import web, selector\n\n' +
     `browser = web.get(base_url=${pyString(bridgeUrl(options.baseUrl))})\n` +
-    `elements = selector.SelectorStore(${pyString(libraryPath(options.libraryPath))})\n` +
+    'elements = selector.SelectorStore()\n' +
     `element = browser.find(elements.get(${pyString(record.name)}, group=${pyString(record.group)}), timeout=10)\n` +
     'print(element.get_text())\n';
 }
@@ -34,7 +34,7 @@ function scriptTemplate(options) {
     '# 网页自动化：先启动浏览器服务并抓取元素，再取消以下注释或从元素库插入代码。\n' +
     '# from wbot import web, selector\n' +
     `# browser = web.get(base_url=${pyString(bridgeUrl(options.baseUrl))})\n` +
-    `# elements = selector.SelectorStore(${pyString(libraryPath(options.libraryPath))})\n` +
+    '# elements = selector.SelectorStore()\n' +
     '# element = browser.find(elements.get("元素名称", group="默认"))\n' +
     '# print(element.get_text())\n';
 }

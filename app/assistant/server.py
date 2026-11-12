@@ -185,9 +185,9 @@ class AssistantHandler(BaseHTTPRequestHandler):
             self._connection()
             self._json(200, self.server.shared_elements.dispatch(path.removeprefix('/api/shared-elements/'), body))
         elif path == "/api/settings/connect":
-            if set(body) != {'server_url', 'device_name'}:
+            if not {'server_url', 'device_name'} <= set(body) or set(body) - {'server_url', 'device_name', 'binding_key'}:
                 raise ValueError('连接设置需要 server_url 与 device_name')
-            self._json(200, {'settings': self._connection().connect(body['server_url'], body['device_name'])})
+            self._json(200, {'settings': self._connection().connect(body['server_url'], body['device_name'], body.get('binding_key', ''))})
         elif path == "/api/settings/disconnect":
             if body:
                 raise ValueError('断开连接不接受额外参数')

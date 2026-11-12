@@ -41,8 +41,8 @@ class UpdateTests(unittest.TestCase):
             connection.synchronize()
             self.service.agents.decide(connection.store.settings()['device_id'], 'approve')
             connection.synchronize()
-            self.service.releases.upload(release_zip(self.root / 'release.zip'))
-            self.service.releases.publish('0.8.0', {'published': True, 'device_ids': []})
+            self.service.releases.upload(release_zip(self.root / 'release.zip', version='99.0.0'))
+            self.service.releases.publish('99.0.0', {'published': True, 'device_ids': []})
             updates.bundle = self.root / 'installed'
             (updates.bundle / 'python').mkdir(parents=True)
             (updates.bundle / 'python/python.exe').write_bytes(b'python')
@@ -53,11 +53,11 @@ class UpdateTests(unittest.TestCase):
             updates.download()
             updates._thread.join(5)
             self.assertEqual(updates.snapshot()['status'], 'ready', updates.snapshot())
-            self.service.releases.publish('0.8.0', {'published': False, 'device_ids': []})
+            self.service.releases.publish('99.0.0', {'published': False, 'device_ids': []})
             with self.assertRaises(ConnectionError):
                 updates.install(999999)
             self.assertFalse(execution.updating)
-            self.service.releases.publish('0.8.0', {'published': True, 'device_ids': []})
+            self.service.releases.publish('99.0.0', {'published': True, 'device_ids': []})
             (updates._prepared / 'prepared/WBotAssistant/WBotAssistant.exe').write_bytes(b'changed')
             with self.assertRaises(ValueError):
                 updates.install(999999)

@@ -18,7 +18,7 @@ BINDING_LABELS = {'unconfigured': '尚未连接', 'connecting': '正在提交申
                   'rejected': '申请被拒绝', 'revoked': '授权已撤销',
                   'disconnected': '已断开', 'offline': '连接异常'}
 BINDING_HINTS = {
-    'unconfigured': '填写 OC 所在电脑的服务地址，申请绑定这台设备。',
+    'unconfigured': '填写 OC 地址及管理员生成的接入 Key，申请绑定这台设备。',
     'connecting': '正在向 OC 提交绑定申请，状态会自动更新。',
     'pending': '请管理员在 OC 中核对下方确认码，并批准这台设备。',
     'approved': '管理员已批准此设备，连接状态会自动更新。',
@@ -144,7 +144,7 @@ class SettingsPage(QWidget):
         fields.addWidget(label('OC 服务地址', 'fieldLabel'))
         self.server_url = QLineEdit()
         self.server_url.setAccessibleName('OC 服务地址')
-        self.server_url.setPlaceholderText('例如 http://192.168.1.20:8793')
+        self.server_url.setPlaceholderText('例如 https://rpa.marswei.fun')
         self.server_url.setFixedHeight(44)
         self.server_url.textChanged.connect(self._draft_changed)
         fields.addWidget(self.server_url)
@@ -157,6 +157,17 @@ class SettingsPage(QWidget):
         self.device_name.setFixedHeight(44)
         self.device_name.textChanged.connect(self._draft_changed)
         fields.addWidget(self.device_name)
+        fields.addSpacing(6)
+        fields.addWidget(label('接入 Key', 'fieldLabel'))
+        self.binding_key = QLineEdit()
+        self.binding_key.setAccessibleName('OC 接入 Key')
+        self.binding_key.setPlaceholderText('粘贴 OC → Robot 连接中生成的 Key')
+        self.binding_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.binding_key.setMaxLength(128)
+        self.binding_key.setFixedHeight(44)
+        self.binding_key.textChanged.connect(self._draft_changed)
+        fields.addWidget(self.binding_key)
+        fields.addWidget(label('首次绑定或重新申请需要 Key；已有绑定重新连接无需重复填写。', 'hint', True))
         return card
 
     def _binding_card(self):
@@ -207,7 +218,8 @@ class SettingsPage(QWidget):
 
     def _draft_differs(self):
         return (self.server_url.text().strip() != (self.settings.get('server_url') or '')
-                or self.device_name.text().strip() != (self.settings.get('device_name') or ''))
+                or self.device_name.text().strip() != (self.settings.get('device_name') or '')
+                or bool(self.binding_key.text().strip()))
 
     def _update_transport_hint(self):
         try:
@@ -229,6 +241,9 @@ class SettingsPage(QWidget):
                                  '断开后可重新连接；设备授权由 OC 管理员管理。')
         retryable = state not in ('connecting', 'pending', 'approved')
         complete = bool(self.server_url.text().strip() and self.device_name.text().strip())
+        reusable = (not changed and state not in ('unconfigured', 'rejected', 'revoked')
+                    and self.settings.get('has_binding_credentials', bool(self.settings.get('device_id'))))
+        complete = complete and (reusable or bool(self.binding_key.text().strip()))
         show_apply = self.busy or changed or state not in ('approved', 'pending')
         self.connect_button.setVisible(show_apply)
         self.connect_button.setEnabled(self.online and not self.busy and complete and (changed or retryable))
@@ -237,6 +252,7 @@ class SettingsPage(QWidget):
         self.disconnect_button.setEnabled(self.online and not self.busy and configured)
         self.server_url.setEnabled(not self.busy)
         self.device_name.setEnabled(not self.busy)
+        self.binding_key.setEnabled(not self.busy)
         if self.busy:
             self.connect_button.setText('正在处理…')
         elif state == 'disconnected' and not changed:
@@ -314,6 +330,8 @@ class SettingsPage(QWidget):
         if self.closed or not self.connect_button.isEnabled():
             return
         body = {'server_url': self.server_url.text().strip(), 'device_name': self.device_name.text().strip()}
+        if self.binding_key.text().strip():
+            body['binding_key'] = self.binding_key.text().strip()
         self._perform_action('/api/settings/connect', body)
 
     def disconnect_service(self):
@@ -336,6 +354,7 @@ class SettingsPage(QWidget):
         self.online = True
         self._poll_error = ''
         self.settings = response['settings']
+        self.binding_key.clear()
         self._set_draft()
         self._render_settings()
 

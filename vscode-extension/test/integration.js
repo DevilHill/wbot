@@ -137,7 +137,7 @@ async function run() {
     check('安装内置 wheel 到测试 Python 环境');
     await vscode.commands.executeCommand('wbot.startBridge');
     assert.ok(api.bridge.child);
-    assert.equal((await core.request(base,'/api/health')).wbot,'0.1.0');
+    assert.equal((await core.request(base,'/api/health')).wbot,'0.1.1');
     check('从 VS Code 启动真实 Python 桥接服务');
     const record = (await core.request(base,'/api/elements/save',{record:{name:'搜索"框 ${1}',group:'中文分组',xpath:'//input[@id="q"]',url:'https://example.com'}})).item;
     await api.refresh();
@@ -147,6 +147,21 @@ async function run() {
     const nodes = api.provider.getChildren(groups[0]);
     assert.equal(api.provider.getTreeItem(nodes[0]).label,record.name);
     check('元素库读取、分组及 TreeItem');
+    const completionFile=path.join(workspace,'completion_test.py');
+    await fs.writeFile(completionFile,'from wbot import selector\nelements = selector.SelectorStore()\nelements.get("搜');
+    const completionDocument=await vscode.workspace.openTextDocument(completionFile);
+    await vscode.window.showTextDocument(completionDocument);
+    const completion=await vscode.commands.executeCommand('vscode.executeCompletionItemProvider',completionDocument.uri,new vscode.Position(2,'elements.get("搜'.length));
+    assert.ok(completion.items.some(item=>item.label===record.name));
+    check('真实 Python 编辑器提供项目元素名补全');
+    const editing=vscode.commands.executeCommand('wbot.editElement',nodes[0]);
+    await until(()=>vscode.window.tabGroups.all.some(group=>group.tabs.some(tab=>tab.input?.viewType?.includes('wbot.elementEditor'))));
+    const elementTab=vscode.window.tabGroups.all.flatMap(group=>group.tabs).find(tab=>tab.input?.viewType?.includes('wbot.elementEditor'));
+    await vscode.window.tabGroups.close(elementTab);
+    await editing;
+    assert.equal(api.getElements()[0].xpath,record.xpath);
+    check('真实 Webview 元素表单打开与关闭取消，不修改库记录');
+
     const doc = await vscode.workspace.openTextDocument({language:'python',content:''});
     await vscode.window.showTextDocument(doc);
     await vscode.commands.executeCommand('wbot.insertElement',nodes[0]);

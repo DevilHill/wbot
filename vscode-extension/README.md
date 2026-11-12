@@ -1,20 +1,20 @@
 # WBot Studio for VS Code · 编码版
 
-**WBot Studio 0.6.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
+**WBot 开发工具 0.7.1** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
 
-支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可交给 Assistant 本地预览导入运行，使用说明见源码仓库的 `docs/assistant.md`。默认普通脚本演示文本替换与日志，无需启动浏览器。
+支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可直接发布到 Assistant 或 OC，使用说明见源码仓库的 `docs/assistant.md`。默认普通脚本演示文本替换与日志，无需启动浏览器。
 
-## 0.6 界面与操作
+## 0.7 开发、元素与发布
 
 - 元素库单击打开只读详情；复制 XPath 使用行内复制按钮或右键菜单，浏览不会改变剪贴板。
-- 新增和编辑使用五步原生输入框，显示步骤、支持返回并保留当前草稿；最后确认完整内容再保存。取消不会写入。
+- 新增和编辑使用一个紧凑表单，集中填写名称、分组、XPath、页面与描述；保存失败保留草稿。
 - 共享仓库侧栏持续显示仓库、分支、申请状态和本地修改；可见时每 15 秒更新，也可手动刷新。连接异常保留上次数据并明确提示，写入前仍会重新校验状态。
 - 点击变更元素打开该元素的原生 Diff；“查看本地差异”也可选择完整快照。侧栏仓库图标根据当前状态提供下一步操作，详细 JSON 保留为诊断入口。
 - 欢迎内容按浏览器服务是否连接区分准备环境和添加元素；进度通知说明正在读取、提交还是拉取。
 
 ## 安装与首次使用
 
-1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.6.0.vsix`。本版通过 VSIX 分发，未发布到 Marketplace。
+1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.7.1.vsix`。本版通过 VSIX 分发，未发布到 Marketplace。
 2. 打开本机项目文件夹，并将工作区设为受信任。需要 VS Code **1.90+** 和 Python **3.10+**。
 3. 打开左侧 **WBot**，执行 **选择 Python 解释器**，选择项目环境中的 `python.exe`。留空时依次使用 Microsoft Python 扩展当前解释器、项目 `.venv` 或 PATH 中的 `python`。
 4. 执行 **WBot: 将 wbot 安装到所选 Python 环境**，等待终端显示安装成功。VSIX 内置 wbot wheel，安装 `lxml` 依赖可能需要网络。
@@ -43,11 +43,11 @@
 2. 编辑 `main.py` 和 `wbot.json`，声明入口、版本、文件白名单、输入参数及精确依赖。项目名使用英文字母或数字开头，只包含英文字母、数字、`_`、`-`，最多 80 位。
 3. 执行 **WBot: 构建自动化发布包**。命令先保存编辑内容；多工作区时使用当前编辑文件所属项目，没有对应项目时让你选择。
 4. 构建结果保存在项目 `dist/<name>-<version>.wbot.zip`，可点击提示在文件管理器中显示。相同输出不会覆盖；更改发布内容后先提高版本。
-5. 在 Assistant 中手工导入这个包，填写参数并运行。当前没有上传到 OC、部署或远程派发功能。
+5. 执行 **WBot: 发布自动化到 Assistant / OC**，选择目标。可构建当前项目或选择已有发布包；重试时选择同一个包，内容有变化先提高版本。Assistant 收到后出现在“我的自动化”；OC 收到后进入自动化包仓库。发布不会自动运行或创建流程部署。
 
 这两个命令使用选定的 Python 和扩展内的包工具，不依赖浏览器服务运行。`wbot.json` 是新的项目清单，与旧版 `.wbot.json` 流程文件不同。
 
-初始化入口使用 `wbot.runtime.parameters()` 和 `runtime.set_result()`，需要 Assistant 提供运行上下文；当前请通过“构建 → 导入 → 运行”验证该示例。现有“运行当前 Python 脚本”和 Python Debugger 不会自动注入这一上下文，普通脚本运行调试继续保持原有行为。
+初始化入口使用 `wbot.runtime.parameters()` 和 `runtime.set_result()`，需要 Assistant 提供运行上下文；请通过“构建 → 发布 → 在 Assistant 运行”验证该示例。现有“运行当前 Python 脚本”和 Python Debugger 不会自动注入这一上下文，普通脚本运行调试继续保持原有行为。
 
 元素资产需要显式导出为 `wbot-elements` JSON，列入清单的 `files` 并填写 `elements` 路径。发布脚本应使用 `selector.SelectorStore()` 读取 Assistant 提供的任务元素库；从旧代码插入模板得到的个人绝对路径需移除，避免继续访问开发机全局库。清单完整示例、命令行用法、依赖与运行限制见源码仓库的 `docs/assistant.md`。
 
@@ -143,7 +143,7 @@ npm run package
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
 ```
 
-产物为仓库 `dist/wbot-studio-0.6.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目包工具、浏览器桥、抓取扩展、wbot 及其 wheel，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按源码仓库的 `docs/assistant.md` 启动；VSIX 不作为 Assistant 桌面安装包。
+产物为仓库 `dist/wbot-studio-0.7.1.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目包工具、浏览器桥、抓取扩展、wbot 及其 wheel，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按源码仓库的 `docs/assistant.md` 启动；VSIX 不作为 Assistant 桌面安装包。
 
 `npm test` 运行编码版与桥服务回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
 
@@ -156,3 +156,20 @@ npm run package
 ## 许可
 
 本项目采用 MIT 许可证，见扩展包内的 `LICENSE.txt` 或源码中的 `LICENSE`。
+
+
+## SDK 提示与项目元素
+
+安装 Microsoft Python / Pylance，并选中安装了 wbot 的解释器。内置 wbot 0.1.1 带有 `py.typed`、选择器和运行上下文类型信息；模块提示、函数签名和文档由 Python 语言服务提供。未来的 wbot_oc Python 客户端安装到同一解释器后沿用这条机制；当前不生成尚未存在的 API。
+
+`elements = selector.SelectorStore()` 后输入 `elements.get("` 可获得元素名提示，`group="` 可获得分组提示。优先读取当前项目 `wbot.json` 声明的 JSON 快照，未声明时使用已加载的本地元素库。共享仓库仍在“共享与版本”提供分支、提交和合并操作。
+
+发布前执行 **WBot: 将元素加入项目快照**，勾选所需元素。命令创建新 JSON 并写入清单 `files` / `elements`，不会覆盖现有快照。构建校验 XPath 并移除临时浏览器标识。新插入的代码使用 `SelectorStore()`，由运行环境提供元素库路径。
+
+## 发布认证与回执
+
+- Assistant：从 `wbot.assistantStateDir` 读取本机会话，只访问回环地址；通过已有包安装接口交付，任务托管仍由 Assistant 负责。
+- OC：设置 `wbot.ocUrl` 或在发布时输入 HTTPS 地址，使用具有 `packages.manage` 权限的开发者账号登录。密码只用于本次发布，完成后退出会话；不借用 Robot 设备授权。仅本机测试允许 HTTP。
+- 回执中的包名、版本、标识匹配后才标为成功。网络异常显示“未确认”，先核对目标包列表；不会自动重放上传。
+- **WBot: 查看发布记录** 保存最近 100 次的目标、版本、产物路径和回执，不保存密码、Cookie 或设备凭据。
+- 发布到 OC 后，由管理端选择 Robot / Environment 部署流程并配置任务调度。发布、部署、运行是三个独立操作。

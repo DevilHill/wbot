@@ -50,7 +50,7 @@ class GatewayClient:
         self.opener = build_opener(ProxyHandler({}), NoRedirect())
 
     def _request(self, endpoint, body=None):
-        if not endpoint.startswith('/api/agent/') or any(character in endpoint for character in '?\r\n#'):
+        if (not endpoint.startswith('/api/agent/') and endpoint != '/api/v1/agent/enroll') or any(character in endpoint for character in '?\r\n#'):
             raise ValueError('无效的 OC 接口地址')
         headers = {'X-WBot-Device': self.device_id, 'X-WBot-Device-Token': self.secret}
         content = None
@@ -68,7 +68,8 @@ class GatewayClient:
                     raise GatewayError('OC 返回重定向，请填写最终接入地址；设备凭据未被转发', exc.code) from None
                 try:
                     payload = json.loads(exc.read1(65536).decode('utf-8'))
-                    message = str(payload.get('error') or f'OC 请求被拒绝（{exc.code}）')[:1000]
+                    error = payload.get('error')
+                    message = str((error.get('message') if isinstance(error, dict) else error) or f'OC 请求被拒绝（{exc.code}）')[:1000]
                 except (ValueError, UnicodeError, AttributeError):
                     message = f'OC 请求被拒绝（{exc.code}）'
             finally:
@@ -95,6 +96,10 @@ class GatewayClient:
             raise GatewayError('OC 返回的数据格式无效') from exc
         if not isinstance(payload, dict):
             raise GatewayError('OC 返回的数据必须是对象')
+        if endpoint == '/api/v1/agent/enroll':
+            payload = payload.get('data')
+            if not isinstance(payload, dict):
+                raise GatewayError('OC 返回的绑定数据无效')
         return payload
 
     def download(self, command, destination, stop):

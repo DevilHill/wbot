@@ -4,7 +4,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const extension = path.resolve(__dirname, '..');
 const root = path.dirname(extension), dest = path.join(extension, 'runtime');
-const wheel = path.join(root, 'dist/wbot/wbot-0.1.0-py3-none-any.whl');
+const wheel = path.join(root, 'dist/wbot/wbot-0.1.1-py3-none-any.whl');
 // 先确认输入存在；生成目录只能位于当前扩展内，拒绝链接到其他目录后清理。
 fs.accessSync(wheel);
 const extensionReal = fs.realpathSync(extension);
@@ -27,10 +27,10 @@ function copyTree(source, target, filter, directoryFilter = () => true) {
   }
 }
 copyTree(path.join(root, 'app'), path.join(dest, 'app'), name => name.endsWith('.py'), name => name !== 'web');
-copyTree(path.join(root, 'wbot'), path.join(dest, 'wbot'), name => name.endsWith('.py'));
+copyTree(path.join(root, 'wbot'), path.join(dest, 'wbot'), name => name.endsWith('.py') || name === 'py.typed');
 copyTree(path.join(root, 'extension'), path.join(dest, 'extension'), name => /\.(js|json|html|png|svg)$/.test(name));
 fs.copyFileSync(path.join(__dirname, 'bridge_server.py'), path.join(dest, 'bridge_server.py'));
 fs.mkdirSync(path.join(dest, 'wheels'), {recursive:true});
-fs.copyFileSync(wheel, path.join(dest, 'wheels/wbot-0.1.0-py3-none-any.whl'));
+fs.copyFileSync(wheel, path.join(dest, 'wheels/wbot-0.1.1-py3-none-any.whl'));
 fs.copyFileSync(path.join(root, 'LICENSE'), path.resolve(__dirname, '../LICENSE'));
 console.log('已准备编码版浏览器服务、wbot 和拾取扩展运行资源');

@@ -23,6 +23,38 @@ class ConnectionTests(unittest.TestCase):
         self.execution.shutdown()
         self.temporary.cleanup()
 
+    def test_binding_key_retries_without_exposure_and_clears_after_enrollment(self):
+        from unittest.mock import patch
+        key = 'wbot_' + 'a' * 43
+        snapshot = self.connection.connect('https://oc.example.com', '电脑', key)
+        self.assertNotIn(key, json.dumps(snapshot))
+        identity = snapshot['device_id']
+        with patch('app.assistant.connection.GatewayClient') as gateway:
+            client = gateway.return_value
+            health = {'product': 'wbot-oc-agent', 'protocol_version': 1, 'binding_key_required': True}
+            client.request.side_effect = [health, OSError('network interrupted')]
+            with self.assertRaises(OSError):
+                self.connection.synchronize()
+            self.assertEqual(self.connection.store.settings()['binding_key'], key)
+            self.assertEqual(self.connection.connect('https://oc.example.com', '电脑', key)['device_id'], identity)
+            device = {'id': identity, 'binding_state': 'pending'}
+            client.request.side_effect = [health, {'device': device}, {'device': device, 'job': None}]
+            self.connection.synchronize()
+            enrollment = client.request.call_args_list[-2]
+            self.assertEqual(enrollment.args[0], '/api/v1/agent/enroll')
+            self.assertEqual(enrollment.args[1]['binding_key'], key)
+            self.assertNotIn('binding_key', self.connection.store.settings())
+            self.assertNotIn(key, json.dumps(self.connection.snapshot()))
+
+    def test_key_required_server_does_not_fall_back_to_legacy_enrollment(self):
+        from unittest.mock import patch
+        self.connection.connect('https://oc.example.com', '电脑')
+        with patch('app.assistant.connection.GatewayClient') as gateway:
+            gateway.return_value.request.return_value = {'product': 'wbot-oc-agent', 'protocol_version': 1, 'binding_key_required': True}
+            with self.assertRaisesRegex(ValueError, '接入 Key'):
+                self.connection.synchronize()
+            gateway.return_value.request.assert_called_once_with('/api/agent/health')
+
     def test_url_is_normalized_and_rejects_credentials_and_ambiguous_paths(self):
         self.assertEqual(normalize_server_url(' HTTP://localhost:8793/ '), 'http://localhost:8793')
         self.assertEqual(normalize_server_url('https://oc.example.com'), 'https://oc.example.com')

@@ -6,7 +6,7 @@ from ..errors import StaleTargetError, UnsupportedFeatureError
 __all__ = ["attach", "get", "get_active", "create", "WebBrowser", "Browser", "WebElement", "Element"]
 
 
-def attach(base_url="http://127.0.0.1:8790", *, http_timeout=10):
+def attach(base_url: str = "http://127.0.0.1:8790", *, http_timeout: float = 10) -> WebBrowser:
     """连接最近一次抓取来源；每次调用重新读取当前 documentId。"""
     client = BridgeClient(base_url, http_timeout=http_timeout)
     payload = client.request("/api/bridge/last").get("payload")
@@ -18,7 +18,7 @@ def attach(base_url="http://127.0.0.1:8790", *, http_timeout=10):
                       title=payload.get("title", ""))
 
 
-def get(title=None, url=None, mode="bridge", *, base_url="http://127.0.0.1:8790", http_timeout=10):
+def get(title: str | None = None, url: str | None = None, mode: str = "bridge", *, base_url: str = "http://127.0.0.1:8790", http_timeout: float = 10) -> WebBrowser:
     """读取当前抓取目标，可用精确 title/url 限定；不切换用户标签页。"""
     if mode != "bridge":
         raise UnsupportedFeatureError("目前支持 mode='bridge'；不提供 ShadowBot 的 CEF/IE 私有运行时")

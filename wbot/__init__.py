@@ -4,7 +4,7 @@ from . import web, selector, files, folders, strings, regex, json, csv, xzip, re
 from .elements import ElementLibrary
 from .selector import Selector, SelectorStore
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 __all__ = ["web", "selector", "files", "folders", "strings", "regex", "json", "csv",
            "xzip", "request", "excel", "logging", "process",
            "ElementLibrary", "Selector", "SelectorStore", "sleep"]

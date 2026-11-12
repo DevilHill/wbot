@@ -1,6 +1,7 @@
 """持久保存后台设置，由独立执行服务负责绑定、拉取和回报 OC 作业。"""
 from contextlib import contextmanager
 import logging
+import re
 from pathlib import Path
 import secrets
 import tempfile
@@ -68,6 +69,7 @@ class ConnectionService:
             public['binding_state'] = 'disconnected'
         public['transport_secure'] = settings['server_url'].startswith('https://')
         public['pending_reports'] = self._pending_reports()
+        public['has_binding_credentials'] = bool(settings.get('enrolled') or settings.get('binding_key'))
         return public
 
     def _pending_reports(self):
@@ -102,7 +104,10 @@ class ConnectionService:
             journal.update(failure='设备已断开或切换后台，此任务未启动', failure_state='stopped')
         self.store.save_job(journal)
 
-    def connect(self, server_url, device_name):
+    def connect(self, server_url, device_name, binding_key=""):
+        if not isinstance(binding_key, str) or (binding_key.strip() and not re.fullmatch(r"wbot_[A-Za-z0-9_-]{43}", binding_key.strip())):
+            raise ValueError("请填写 OC 管理端生成的完整接入 Key")
+        binding_key = binding_key.strip()
         server_url = normalize_server_url(server_url)
         if not isinstance(device_name, str) or not device_name.strip() or len(device_name) > 120:
             raise ValueError('设备名称须为 1–120 个字符')
@@ -126,6 +131,8 @@ class ConnectionService:
                                     'secret': secrets.token_urlsafe(32), 'binding_state': 'connecting',
                                     'verification_code': '', 'last_connected_at': None, 'error': '',
                                     'enabled': True, 'enrolled': False}
+                if binding_key and not settings.get('enrolled'):
+                    settings['binding_key'] = binding_key
                 self.store.save_settings(settings)
         finally:
             self._operation.release()
@@ -151,6 +158,7 @@ class ConnectionService:
         if (not isinstance(device, dict) or device.get('id') != settings['device_id']
                 or device.get('binding_state') not in BINDING_STATES):
             raise ValueError('OC 返回的绑定身份或状态无效')
+        settings.pop('binding_key', None)
         settings.update(binding_state=device['binding_state'], verification_code=device.get('verification_code', ''),
                         last_connected_at=time.time(), error='', enrolled=True)
         with self._settings_lock:
@@ -185,8 +193,15 @@ class ConnectionService:
                 health = client.request('/api/agent/health')
                 if health.get('product') != 'wbot-oc-agent' or health.get('protocol_version') != 1:
                     raise ValueError('该地址不是兼容的 OC 设备接入服务，请确认接入端口')
-                response = client.request('/api/agent/enroll', {'device_id': settings['device_id'],
-                                          'name': settings['device_name'], 'secret': settings['secret']})
+                enrollment = {'device_id': settings['device_id'], 'name': settings['device_name'], 'secret': settings['secret']}
+                binding_key = settings.get('binding_key', '')
+                if health.get('binding_key_required') and not binding_key:
+                    raise ValueError('请在设置中填写 OC 管理端生成的接入 Key')
+                endpoint = '/api/agent/enroll'
+                if binding_key:
+                    enrollment['binding_key'] = binding_key
+                    endpoint = '/api/v1/agent/enroll'
+                response = client.request(endpoint, enrollment)
                 self._save_device(settings, response.get('device'))
             journal = self.store.unfinished_job(settings['device_id'])
             if journal:

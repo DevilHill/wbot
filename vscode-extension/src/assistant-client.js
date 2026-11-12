@@ -75,4 +75,4 @@ async function requestAssistant(directory, action, body = {}, timeout = 30000) {
   });
 }
 
-module.exports = {assistantStateDir, requestAssistant};
+module.exports = {assistantStateDir, requestAssistant, readSession};

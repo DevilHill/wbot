@@ -78,17 +78,20 @@ class SettingsPageTests(unittest.TestCase):
     def test_connect_submits_trimmed_fields_once_and_clears_busy(self):
         self.dialog.server_url.setText(' https://new-oc.example.test ')
         self.dialog.device_name.setText(' 新电脑 ')
+        self.assertFalse(self.dialog.connect_button.isEnabled())
+        self.dialog.binding_key.setText('wbot_' + 'a' * 43)
         QTest.mouseClick(self.dialog.connect_button, Qt.MouseButton.LeftButton)
         self.dialog.connect_service()
         posts = [call for call in self.client.calls if call[0] == 'POST']
         self.assertEqual(posts, [('POST', '/api/settings/connect',
-                                 {'server_url': 'https://new-oc.example.test', 'device_name': '新电脑'})])
+                                 {'server_url': 'https://new-oc.example.test', 'device_name': '新电脑', 'binding_key': 'wbot_' + 'a' * 43})])
         self.assertFalse(self.dialog.connect_button.isEnabled())
         self.assertFalse(self.dialog.server_url.isEnabled())
         pending = dict(SETTINGS, server_url='https://new-oc.example.test', device_name='新电脑',
                        binding_state='pending', verification_code='445566')
         self.client.pending_action[0]({'settings': pending})
         self.assertFalse(self.dialog.busy)
+        self.assertEqual(self.dialog.binding_key.text(), '')
         self.assertEqual(self.dialog.server_url.text(), pending['server_url'])
         self.assertIn('445566', self.dialog.verification_code.text())
 
@@ -124,6 +127,7 @@ class SettingsPageTests(unittest.TestCase):
         self.client.defer_poll = True
         self.dialog.refresh()
         self.dialog.server_url.setText('https://new-oc.example.test')
+        self.dialog.binding_key.setText('wbot_' + 'a' * 43)
         self.dialog.connect_service()
         pending = dict(SETTINGS, server_url='https://new-oc.example.test', binding_state='pending')
         self.client.pending_action[0]({'settings': pending})
@@ -131,13 +135,18 @@ class SettingsPageTests(unittest.TestCase):
         self.assertEqual(self.dialog.settings['server_url'], pending['server_url'])
         self.assertEqual(self.dialog.settings['binding_state'], 'pending')
 
-    def test_revoked_and_disconnected_can_request_without_editing(self):
+    def test_revoked_requires_new_key_and_disconnected_reuses_identity(self):
         for state, caption in (('revoked', '重新申请'), ('disconnected', '重新连接')):
             self.client.settings['binding_state'] = state
             self.dialog.refresh()
             QTest.qWait(20)
+            if state == 'revoked':
+                self.assertFalse(self.dialog.connect_button.isEnabled())
+                self.dialog.binding_key.setText('wbot_' + 'a' * 43)
             self.assertTrue(self.dialog.connect_button.isEnabled())
             self.assertIn(caption, self.dialog.connect_button.text())
+            self.dialog.binding_key.clear()
+            self.dialog._draft_edited = False
 
     def test_close_ignores_late_action_response(self):
         self.dialog.disconnect_service()

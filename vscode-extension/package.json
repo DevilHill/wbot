@@ -1,130 +1,481 @@
 {
   "name": "wbot-studio",
-  "displayName": "WBot Studio 编码版",
-  "description": "在 VS Code 中抓取网页元素、管理元素库、编写与运行 wbot Python 自动化脚本。",
-  "version": "0.6.0",
+  "displayName": "WBot 开发工具",
+  "description": "为 wbot Python SDK 提供开发辅助、本地元素库管理，并发布自动化到 Assistant 或 OC。",
+  "version": "0.7.1",
   "publisher": "xpath-studio-local",
   "license": "MIT",
   "engines": {
     "vscode": "^1.90.0"
   },
-  "categories": ["Other", "Snippets", "Programming Languages"],
-  "keywords": ["wbot", "xpath", "python", "automation"],
+  "categories": [
+    "Other",
+    "Snippets",
+    "Programming Languages"
+  ],
+  "keywords": [
+    "wbot",
+    "xpath",
+    "python",
+    "automation"
+  ],
   "main": "./extension.js",
-  "extensionKind": ["ui"],
-  "activationEvents": ["onView:wbot.elements"],
+  "extensionKind": [
+    "ui"
+  ],
+  "activationEvents": [
+    "onView:wbot.elements",
+    "onLanguage:python"
+  ],
   "capabilities": {
-    "untrustedWorkspaces": {"supported":false,"description":"运行 Python 和启动本机服务需要受信任的工作区。"},
-    "virtualWorkspaces": {"supported":false,"description":"需要本机 Python、文件系统和浏览器。"}
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "运行 Python 和启动本机服务需要受信任的工作区。"
+    },
+    "virtualWorkspaces": {
+      "supported": false,
+      "description": "需要本机 Python、文件系统和浏览器。"
+    }
   },
   "contributes": {
     "commands": [
-      {"command":"wbot.initProject","title":"初始化自动化项目","category":"WBot","icon":"$(new-folder)"},
-      {"command":"wbot.buildPackage","title":"构建自动化发布包","category":"WBot","icon":"$(package)"},
-      {"command":"wbot.newScript","title":"新建 Python 自动化脚本","category":"WBot","icon":"$(new-file)"},
-      {"command":"wbot.startBridge","title":"启动 / 连接浏览器服务","category":"WBot","icon":"$(plug)"},
-      {"command":"wbot.stopBridge","title":"停止本扩展启动的服务","category":"WBot"},
-      {"command":"wbot.refresh","title":"刷新元素库","category":"WBot","icon":"$(refresh)"},
-      {"command":"wbot.pick","title":"从浏览器抓取并保存元素","category":"WBot","icon":"$(target)"},
-      {"command":"wbot.saveLastPick","title":"保存最近一次抓取结果","category":"WBot"},
-      {"command":"wbot.addElement","title":"新增元素","category":"WBot","icon":"$(add)"},
-      {"command":"wbot.editElement","title":"编辑元素","category":"WBot","icon":"$(edit)"},
-      {"command":"wbot.deleteElement","title":"删除元素","category":"WBot","icon":"$(trash)"},
-      {"command":"wbot.insertElement","title":"插入元素调用代码","category":"WBot","icon":"$(code)"},
-      {"command":"wbot.copyXPath","title":"复制 XPath","category":"WBot"},
-      {"command":"wbot.validateElement","title":"在抓取页面校验并高亮","category":"WBot"},
-      {"command":"wbot.search","title":"搜索元素","category":"WBot","icon":"$(search)"},
-      {"command":"wbot.importElements","title":"导入元素库 JSON","category":"WBot"},
-      {"command":"wbot.exportElements","title":"导出元素库 JSON","category":"WBot"},
-      {"command":"wbot.sharedElements","title":"共享元素仓库","category":"WBot","icon":"$(repo)"},
-      {"command":"wbot.connectSharedElements","title":"连接共享元素仓库 / 创建分支","category":"WBot"},
-      {"command":"wbot.sharedElementChanges","title":"查看共享元素本地差异","category":"WBot"},
-      {"command":"wbot.commitSharedElements","title":"提交共享元素版本","category":"WBot"},
-      {"command":"wbot.requestElementMerge","title":"发起元素合并申请","category":"WBot"},
-      {"command":"wbot.sharedElementStatus","title":"查看共享元素与合并状态","category":"WBot"},
-      {"command":"wbot.pullSharedElements","title":"拉取共享元素主分支","category":"WBot"},
-      {"command":"wbot.runFile","title":"运行当前 Python 脚本","category":"WBot","icon":"$(play)"},
-      {"command":"wbot.debugFile","title":"调试当前 Python 脚本","category":"WBot","icon":"$(debug-alt)"},
-      {"command":"wbot.selectPython","title":"选择 Python 解释器","category":"WBot"},
-      {"command":"wbot.installRuntime","title":"将 wbot 安装到所选 Python 环境","category":"WBot"},
-      {"command":"wbot.browserExtension","title":"准备浏览器扩展目录","category":"WBot"},
-      {"command":"wbot.showOutput","title":"查看输出日志","category":"WBot"},
-      {"command":"wbot.help","title":"使用指南","category":"WBot"},
-      {"command":"wbot.elementDetails","title":"查看元素详情","category":"WBot","icon":"$(info)"},
-      {"command":"wbot.refreshSharedView","title":"刷新共享仓库状态","category":"WBot","icon":"$(refresh)"}
+      {
+        "command": "wbot.initProject",
+        "title": "初始化自动化项目",
+        "category": "WBot",
+        "icon": "$(new-folder)"
+      },
+      {
+        "command": "wbot.buildPackage",
+        "title": "构建自动化发布包",
+        "category": "WBot",
+        "icon": "$(package)"
+      },
+      {
+        "command": "wbot.newScript",
+        "title": "新建 Python 自动化脚本",
+        "category": "WBot",
+        "icon": "$(new-file)"
+      },
+      {
+        "command": "wbot.startBridge",
+        "title": "启动 / 连接浏览器服务",
+        "category": "WBot",
+        "icon": "$(plug)"
+      },
+      {
+        "command": "wbot.stopBridge",
+        "title": "停止本扩展启动的服务",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.refresh",
+        "title": "刷新元素库",
+        "category": "WBot",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "wbot.pick",
+        "title": "从浏览器抓取并保存元素",
+        "category": "WBot",
+        "icon": "$(target)"
+      },
+      {
+        "command": "wbot.saveLastPick",
+        "title": "保存最近一次抓取结果",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.addElement",
+        "title": "新增元素",
+        "category": "WBot",
+        "icon": "$(add)"
+      },
+      {
+        "command": "wbot.editElement",
+        "title": "编辑元素",
+        "category": "WBot",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "wbot.deleteElement",
+        "title": "删除元素",
+        "category": "WBot",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "wbot.insertElement",
+        "title": "插入元素调用代码",
+        "category": "WBot",
+        "icon": "$(code)"
+      },
+      {
+        "command": "wbot.copyXPath",
+        "title": "复制 XPath",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.validateElement",
+        "title": "在抓取页面校验并高亮",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.search",
+        "title": "搜索元素",
+        "category": "WBot",
+        "icon": "$(search)"
+      },
+      {
+        "command": "wbot.importElements",
+        "title": "导入元素库 JSON",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.exportElements",
+        "title": "导出元素库 JSON",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.sharedElements",
+        "title": "共享元素仓库",
+        "category": "WBot",
+        "icon": "$(repo)"
+      },
+      {
+        "command": "wbot.connectSharedElements",
+        "title": "连接共享元素仓库 / 创建分支",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.sharedElementChanges",
+        "title": "查看共享元素本地差异",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.commitSharedElements",
+        "title": "提交共享元素版本",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.requestElementMerge",
+        "title": "发起元素合并申请",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.sharedElementStatus",
+        "title": "查看共享元素与合并状态",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.pullSharedElements",
+        "title": "拉取共享元素主分支",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.runFile",
+        "title": "运行当前 Python 脚本",
+        "category": "WBot",
+        "icon": "$(play)"
+      },
+      {
+        "command": "wbot.debugFile",
+        "title": "调试当前 Python 脚本",
+        "category": "WBot",
+        "icon": "$(debug-alt)"
+      },
+      {
+        "command": "wbot.selectPython",
+        "title": "选择 Python 解释器",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.installRuntime",
+        "title": "将 wbot 安装到所选 Python 环境",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.browserExtension",
+        "title": "准备浏览器扩展目录",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.showOutput",
+        "title": "查看输出日志",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.help",
+        "title": "使用指南",
+        "category": "WBot"
+      },
+      {
+        "command": "wbot.elementDetails",
+        "title": "查看元素详情",
+        "category": "WBot",
+        "icon": "$(info)"
+      },
+      {
+        "command": "wbot.refreshSharedView",
+        "title": "刷新共享仓库状态",
+        "category": "WBot",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "wbot.publishPackage",
+        "title": "发布自动化到 Assistant / OC",
+        "category": "WBot",
+        "icon": "$(cloud-upload)"
+      },
+      {
+        "command": "wbot.publicationHistory",
+        "title": "查看发布记录",
+        "category": "WBot",
+        "icon": "$(history)"
+      },
+      {
+        "command": "wbot.snapshotElements",
+        "title": "将元素加入项目快照",
+        "category": "WBot",
+        "icon": "$(archive)"
+      }
     ],
     "viewsContainers": {
       "activitybar": [
-        {"id":"wbot","title":"WBot","icon":"assets/wbot.svg"}
+        {
+          "id": "wbot",
+          "title": "WBot",
+          "icon": "assets/wbot.svg"
+        }
       ]
     },
     "views": {
       "wbot": [
-        {"id":"wbot.elements","name":"元素库","contextualTitle":"WBot 元素库"},
-        {"id":"wbot.shared","name":"共享仓库","icon":"assets/wbot.svg"}
+        {
+          "id": "wbot.elements",
+          "name": "元素库",
+          "contextualTitle": "WBot 元素库"
+        },
+        {
+          "id": "wbot.shared",
+          "name": "共享与版本",
+          "icon": "assets/wbot.svg"
+        }
       ]
     },
     "viewsWelcome": [
-      {"view":"wbot.elements","when":"!wbot.bridgeConnected","contents":"准备开发环境\n[选择 Python](command:wbot.selectPython) · [安装 wbot](command:wbot.installRuntime)\n[启动浏览器服务](command:wbot.startBridge)\n[准备浏览器扩展](command:wbot.browserExtension)\n[使用指南](command:wbot.help)"},
-      {"view":"wbot.elements","when":"wbot.bridgeConnected","contents":"浏览器服务已连接，开始添加元素。\n[从页面抓取元素](command:wbot.pick) · [手动新增](command:wbot.addElement)\n[新建 Python 脚本](command:wbot.newScript)\n[初始化项目](command:wbot.initProject)"},
-      {"view":"wbot.shared","contents":"使用已批准的 Assistant 连接共享 XPath 仓库。\n[读取连接状态](command:wbot.refreshSharedView) · [共享操作](command:wbot.sharedElements)"}
+      {
+        "view": "wbot.elements",
+        "when": "!wbot.bridgeConnected",
+        "contents": "Python 开发辅助 · 本地元素库 · 自动化发布\n[选择 Python](command:wbot.selectPython) · [安装 wbot](command:wbot.installRuntime)\n[启动元素库服务](command:wbot.startBridge)\n[新建 Python 脚本](command:wbot.newScript) · [初始化项目](command:wbot.initProject)\n[发布自动化](command:wbot.publishPackage) · [使用指南](command:wbot.help)"
+      },
+      {
+        "view": "wbot.elements",
+        "when": "wbot.bridgeConnected",
+        "contents": "浏览器服务已连接，开始添加元素。\n[从页面抓取元素](command:wbot.pick) · [手动新增](command:wbot.addElement)\n[新建 Python 脚本](command:wbot.newScript)\n[初始化项目](command:wbot.initProject)"
+      },
+      {
+        "view": "wbot.shared",
+        "contents": "使用已批准的 Assistant 连接共享 XPath 仓库。\n[读取连接状态](command:wbot.refreshSharedView) · [共享操作](command:wbot.sharedElements)"
+      }
     ],
     "menus": {
       "view/title": [
-        {"command":"wbot.initProject","when":"view == wbot.elements","group":"0_project@1"},
-        {"command":"wbot.buildPackage","when":"view == wbot.elements","group":"0_project@2"},
-        {"command":"wbot.newScript","when":"view == wbot.elements","group":"navigation@0"},
-        {"command":"wbot.startBridge","when":"view == wbot.elements","group":"navigation@1"},
-        {"command":"wbot.pick","when":"view == wbot.elements","group":"navigation@2"},
-        {"command":"wbot.refresh","when":"view == wbot.elements","group":"navigation@3"},
-        {"command":"wbot.addElement","when":"view == wbot.elements","group":"1_manage@1"},
-        {"command":"wbot.search","when":"view == wbot.elements","group":"1_manage@2"},
-        {"command":"wbot.importElements","when":"view == wbot.elements","group":"2_transfer@1"},
-        {"command":"wbot.exportElements","when":"view == wbot.elements","group":"2_transfer@2"},
-        {"command":"wbot.sharedElements","when":"view == wbot.elements","group":"3_shared@1"},
-        {"command":"wbot.stopBridge","when":"view == wbot.elements","group":"4_service@1"},
-        {"command":"wbot.refreshSharedView","when":"view == wbot.shared","group":"navigation@1"},
-        {"command":"wbot.sharedElements","when":"view == wbot.shared","group":"navigation@2"},
-        {"command":"wbot.sharedElementStatus","when":"view == wbot.shared","group":"1_diagnostics"}
+        {
+          "command": "wbot.initProject",
+          "when": "view == wbot.elements",
+          "group": "0_project@1"
+        },
+        {
+          "command": "wbot.buildPackage",
+          "when": "view == wbot.elements",
+          "group": "0_project@2"
+        },
+        {
+          "command": "wbot.startBridge",
+          "when": "view == wbot.elements",
+          "group": "navigation@1"
+        },
+        {
+          "command": "wbot.pick",
+          "when": "view == wbot.elements",
+          "group": "navigation@2"
+        },
+        {
+          "command": "wbot.refresh",
+          "when": "view == wbot.elements",
+          "group": "navigation@3"
+        },
+        {
+          "command": "wbot.addElement",
+          "when": "view == wbot.elements",
+          "group": "1_manage@1"
+        },
+        {
+          "command": "wbot.search",
+          "when": "view == wbot.elements",
+          "group": "1_manage@2"
+        },
+        {
+          "command": "wbot.importElements",
+          "when": "view == wbot.elements",
+          "group": "2_transfer@1"
+        },
+        {
+          "command": "wbot.exportElements",
+          "when": "view == wbot.elements",
+          "group": "2_transfer@2"
+        },
+        {
+          "command": "wbot.sharedElements",
+          "when": "view == wbot.elements",
+          "group": "3_shared@1"
+        },
+        {
+          "command": "wbot.stopBridge",
+          "when": "view == wbot.elements",
+          "group": "4_service@1"
+        },
+        {
+          "command": "wbot.refreshSharedView",
+          "when": "view == wbot.shared",
+          "group": "navigation@1"
+        },
+        {
+          "command": "wbot.sharedElements",
+          "when": "view == wbot.shared",
+          "group": "navigation@2"
+        },
+        {
+          "command": "wbot.sharedElementStatus",
+          "when": "view == wbot.shared",
+          "group": "1_diagnostics"
+        },
+        {
+          "command": "wbot.publishPackage",
+          "when": "view == wbot.elements",
+          "group": "navigation@0"
+        },
+        {
+          "command": "wbot.publicationHistory",
+          "when": "view == wbot.elements",
+          "group": "0_project@3"
+        },
+        {
+          "command": "wbot.snapshotElements",
+          "when": "view == wbot.elements",
+          "group": "2_transfer@3"
+        },
+        {
+          "command": "wbot.newScript",
+          "when": "view == wbot.elements",
+          "group": "0_project@0"
+        }
       ],
       "view/item/context": [
-        {"command":"wbot.insertElement","when":"view == wbot.elements && viewItem == wbot.element","group":"inline@1"},
-        {"command":"wbot.editElement","when":"view == wbot.elements && viewItem == wbot.element","group":"inline@2"},
-        {"command":"wbot.copyXPath","when":"viewItem == wbot.element","group":"1_copy@1"},
-        {"command":"wbot.validateElement","when":"viewItem == wbot.element","group":"2_check@1"},
-        {"command":"wbot.deleteElement","when":"viewItem == wbot.element","group":"3_delete@1"},
-        {"command":"wbot.copyXPath","when":"view == wbot.elements && viewItem == wbot.element","group":"inline@3"}
+        {
+          "command": "wbot.insertElement",
+          "when": "view == wbot.elements && viewItem == wbot.element",
+          "group": "inline@1"
+        },
+        {
+          "command": "wbot.editElement",
+          "when": "view == wbot.elements && viewItem == wbot.element",
+          "group": "inline@2"
+        },
+        {
+          "command": "wbot.copyXPath",
+          "when": "viewItem == wbot.element",
+          "group": "1_copy@1"
+        },
+        {
+          "command": "wbot.validateElement",
+          "when": "viewItem == wbot.element",
+          "group": "2_check@1"
+        },
+        {
+          "command": "wbot.deleteElement",
+          "when": "viewItem == wbot.element",
+          "group": "3_delete@1"
+        },
+        {
+          "command": "wbot.copyXPath",
+          "when": "view == wbot.elements && viewItem == wbot.element",
+          "group": "inline@3"
+        }
       ],
       "editor/title": [
-        {"command":"wbot.runFile","when":"resourceExtname == .py && isWorkspaceTrusted","group":"navigation@15"},
-        {"command":"wbot.debugFile","when":"resourceExtname == .py && isWorkspaceTrusted","group":"navigation@16"}
+        {
+          "command": "wbot.runFile",
+          "when": "resourceExtname == .py && isWorkspaceTrusted",
+          "group": "navigation@15"
+        },
+        {
+          "command": "wbot.debugFile",
+          "when": "resourceExtname == .py && isWorkspaceTrusted",
+          "group": "navigation@16"
+        }
       ]
     },
     "configuration": {
       "title": "WBot",
       "properties": {
-        "wbot.bridgeUrl": {"type":"string","default":"http://127.0.0.1:8790","scope":"machine","description":"本机浏览器服务地址，只允许 http://127.0.0.1:端口。可连接已有 XPath Studio 1.4.0。"},
-        "wbot.pythonPath": {"type":"string","default":"","scope":"machine-overridable","description":"Python 可执行文件路径，不含命令行参数。留空时使用 Python 扩展的当前解释器、项目 .venv 或 PATH 中的 python。"},
-        "wbot.libraryPath": {"type":"string","default":"","scope":"machine","description":"SQLite 元素库路径。留空使用 ~/.xpath_studio/elements.sqlite3。连接外部服务时应与其配置一致。"},
-        "wbot.assistantStateDir": {"type":"string","default":"","scope":"machine","description":"共享元素功能使用的 Assistant 数据目录。留空为 ~/.wbot-assistant；仅从该目录读取本机会话，OC 地址和绑定仍在 Assistant 设置中管理。"},
+        "wbot.bridgeUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:8790",
+          "scope": "machine",
+          "description": "本机浏览器服务地址，只允许 http://127.0.0.1:端口。可连接已有 XPath Studio 1.4.0。"
+        },
+        "wbot.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Python 可执行文件路径，不含命令行参数。留空时使用 Python 扩展的当前解释器、项目 .venv 或 PATH 中的 python。"
+        },
+        "wbot.libraryPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "SQLite 元素库路径。留空使用 ~/.xpath_studio/elements.sqlite3。连接外部服务时应与其配置一致。"
+        },
+        "wbot.assistantStateDir": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "共享元素功能使用的 Assistant 数据目录。留空为 ~/.wbot-assistant；仅从该目录读取本机会话，OC 地址和绑定仍在 Assistant 设置中管理。"
+        },
         "wbot.scriptArgs": {
           "type": "array",
-          "items": {"type":"string"},
+          "items": {
+            "type": "string"
+          },
           "default": [],
           "description": "运行/调试当前脚本时传入的参数列表。"
+        },
+        "wbot.ocUrl": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "OC 管理平台 HTTPS 地址。发布使用独立开发者账号，密码仅用于本次登录。"
         }
       }
     },
     "snippets": [
-      {"language":"python","path":"snippets/python.json"}
+      {
+        "language": "python",
+        "path": "snippets/python.json"
+      }
     ]
   },
   "scripts": {
     "prepare-runtime": "node scripts/prepare-runtime.js",
-    "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js",
-    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.6.0.vsix"
+    "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js test/publish.test.js test/completions.test.js",
+    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.7.1.vsix"
   },
   "devDependencies": {
     "@vscode/vsce": "^3.6.0"
-  }
+  },
+  "extensionPack": [
+    "ms-python.python",
+    "ms-python.vscode-pylance"
+  ]
 }

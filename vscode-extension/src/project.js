@@ -87,7 +87,7 @@ function createProjectCommands({vscode, runtime, output, pythonExecutable}) {
     return manifest;
   }
 
-  async function buildPackage() {
+  async function buildPackage({notify = true} = {}) {
     const folder = await selectProjectFolder(vscode);
     if (!folder || !await vscode.workspace.saveAll()) return;
     try {
@@ -99,7 +99,7 @@ function createProjectCommands({vscode, runtime, output, pythonExecutable}) {
     const built = await execute('build', folder.uri.fsPath, folder.uri);
     if (typeof built.path !== 'string') throw new Error('构建结果缺少发布包路径，请更新扩展运行资源');
     output.appendLine(`已构建自动化发布包：${built.path}`);
-    Promise.resolve(vscode.window.showInformationMessage(`发布包已生成：${built.path}`, '在文件管理器中显示'))
+    if (notify) Promise.resolve(vscode.window.showInformationMessage(`发布包已生成：${built.path}`, '在文件管理器中显示'))
       .then(choice => choice === '在文件管理器中显示' &&
         vscode.commands.executeCommand('revealFileInOS', vscode.Uri.file(built.path)))
       .catch(error => output.appendLine(`无法显示发布包：${error.message}`));

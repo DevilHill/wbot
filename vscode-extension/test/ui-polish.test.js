@@ -14,27 +14,20 @@ test('共享操作随工作副本状态变化，异常与待确认不引导写�
   assert.deepEqual(nextActions({binding:{}, pending_action:'commit'}), []);
 });
 
-test('原生元素输入返回上一步保留草稿，取消不产生保存结果', async () => {
-  const seen = [], events = [['accept','first'], ['back','财务'], ['accept','改名'], ['accept','财务'], ['accept','//input'], ['accept',''], ['accept','备注']];
-  let disposed = 0;
-  const vscode = {QuickInputButtons:{Back:{}}, window:{
-    createInputBox() {
-      const handlers = {};
-      const input = {onDidAccept(fn) { handlers.accept=fn; return {dispose(){}}; }, onDidHide(fn) {handlers.hide=fn; return {dispose(){}};},
-        onDidTriggerButton(fn) {handlers.back=fn; return {dispose(){}};}, dispose(){disposed++;},
-        show() { seen.push({step:this.step,value:this.value}); const [event,value] = events.shift(); this.value=value; queueMicrotask(()=>handlers[event]()); }};
-      return input;
-    }, showInformationMessage:async ()=>'保存'
-  }};
-  const draft = await editElementDraft(vscode, {id:'one', xpath:'//old'});
-  assert.equal(draft.name, '改名');
-  assert.equal(draft.group, '财务');
-  assert.deepEqual(seen[2], {step:1,value:'first'});
-  assert.deepEqual(seen[3], {step:2,value:'财务'});
-  assert.equal(disposed, 7);
-  events.push(['hide','']);
-  assert.equal(await editElementDraft(vscode, draft), undefined);
-  assert.equal(disposed, 8);
+test('元素表单转义输入，校验字段且只保存当前面板的消息', async () => {
+  const {editorHTML, validateDraft} = require('../src/element-input');
+  assert.ok(!editorHTML('nonce',{name:'<script>bad</script>'}).includes('value="<script>'));
+  assert.throws(()=>validateDraft({name:'',group:'g',xpath:'//x',url:'',description:''}),/不能为空/);
+  let receive, dispose, html, writes=0;
+  const panel={webview:{set html(value){html=value;},onDidReceiveMessage(fn){receive=fn;return {dispose(){}};},postMessage:async()=>{}},onDidDispose(fn){dispose=fn;return {dispose(){}};},dispose(){dispose();}};
+  const vscode={ViewColumn:{Active:1},window:{createWebviewPanel:()=>panel}};
+  const pending=editElementDraft(vscode,{id:'trusted'},async record=>{writes++;return record;});
+  const nonce=html.match(/script-src 'nonce-([a-f0-9]+)'/)[1];
+  const fields={name:'name',group:'g',xpath:'//input',url:'',description:''};
+  await receive({action:'save',session:'stale',fields});assert.equal(writes,0);
+  await receive({action:'save',session:nonce,fields:{...fields,id:'forged'}});assert.equal(writes,0);
+  await receive({action:'save',session:nonce,fields});assert.equal(writes,1);
+  assert.equal((await pending).id,'trusted');
 });
 
 test('切换连接后丢弃旧响应，销毁侧栏后不再更新界面', async () => {

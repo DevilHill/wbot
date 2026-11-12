@@ -5,6 +5,8 @@ const path = require('node:path');
 const core = require('./src/core');
 const {BridgeManager} = require('./src/bridge');
 const {createProjectCommands} = require('./src/project');
+const {createPublishCommands} = require('./src/publish');
+const {registerCompletions} = require('./src/completions');
 const {createSharedElementCommands} = require('./src/shared-elements');
 
 const {createSharedView} = require('./src/shared-view');
@@ -26,6 +28,7 @@ function activate(context) {
     return requestAssistant(assistantStateDir(cfg.assistantStateDir), 'status', {library_path:cfg.libraryPath});
   });
   let records = [], query = '', generation = 0, picking = false;
+  registerCompletions(vscode, context, () => records);
   const settings = resource => {
     const cfg = vscode.workspace.getConfiguration('wbot', resource);
     return {baseUrl:core.bridgeUrl(cfg.get('bridgeUrl')), libraryPath:core.libraryPath(cfg.get('libraryPath')),
@@ -102,10 +105,13 @@ function activate(context) {
       {placeHolder:'选择元素',matchOnDescription:true,matchOnDetail:true}))?.record;
   }
   async function editRecord(original = {}) {
-    const record = await editElementDraft(vscode, original);
-    if (!record) return;
-    const result = await api('/api/elements/save', {record});
-    await refresh(); return result.item;
+    const source = settings();
+    return editElementDraft(vscode, original, async record => {
+      const current = settings();
+      if (current.baseUrl !== source.baseUrl || current.libraryPath !== source.libraryPath) throw new Error('元素库连接已改变，请关闭表单后重新编辑');
+      const result = await api('/api/elements/save', {record});
+      await refresh(); return result.item;
+    });
   }
   async function insertElement(node) {
     const record = await chooseElement(node); if (!record) return;
@@ -175,7 +181,7 @@ function activate(context) {
     const folder = vscode.workspace.workspaceFolders?.[0];
     if (!folder) throw new Error('请先打开一个本机项目文件夹');
     const python = await pythonExecutable(vscode.window.activeTextEditor?.document.uri);
-    const wheel = path.join(runtime, 'wheels/wbot-0.1.0-py3-none-any.whl');
+    const wheel = path.join(runtime, 'wheels/wbot-0.1.1-py3-none-any.whl');
     const task = new vscode.Task({type:'wbot',action:'install'},folder,'安装 wbot','WBot',
       new vscode.ProcessExecution(python,['-m','pip','install',wheel],{cwd:folder.uri.fsPath}));
     task.presentationOptions = {reveal:vscode.TaskRevealKind.Always};
@@ -203,8 +209,10 @@ function activate(context) {
     await fs.writeFile(uri.fsPath,core.scriptTemplate(settings(uri)),{flag:'wx'});
     await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(uri));
   }
+  const projectCommands = createProjectCommands({vscode, runtime, output, pythonExecutable});
   const handlers = {
-    ...createProjectCommands({vscode, runtime, output, pythonExecutable}),
+    ...projectCommands,
+    ...createPublishCommands({vscode, context, runtime, pythonExecutable, settings, buildPackage:projectCommands.buildPackage, exportElements:async () => (await api('/api/elements/export')).data}),
     ...createSharedElementCommands({vscode, context, settings, refresh, onStatus:sharedView.update}),
     refreshSharedView:() => sharedView.refresh(),
     elementDetails:async node => {

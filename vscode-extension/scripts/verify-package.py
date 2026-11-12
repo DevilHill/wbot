@@ -64,7 +64,7 @@ def main():
             assert source.is_file(), source
             assert archive.read(name) == source.read_bytes(), name
             checked += 1
-        wheel_bytes = archive.read('extension/runtime/wheels/wbot-0.1.0-py3-none-any.whl')
+        wheel_bytes = archive.read('extension/runtime/wheels/wbot-0.1.1-py3-none-any.whl')
         with zipfile.ZipFile(BytesIO(wheel_bytes)) as wheel:
             wheel_count = verify_wheel_sources(wheel, root)
     print(f'VSIX 资源逐字节一致：{checked} 个文件；内置 wheel：{wheel_count} 个 Python 文件。')

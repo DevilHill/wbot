@@ -1,4 +1,5 @@
 """读取 Assistant 运行上下文的参数，并写入结构化结果。"""
+from __future__ import annotations
 import json
 import os
 from pathlib import Path
@@ -22,17 +23,17 @@ def _context():
         raise RuntimeError(f'无法读取 WBot 运行上下文：{error}') from error
 
 
-def parameters():
+def parameters() -> dict[str, str | int | float | bool]:
     """返回当前作业经过校验并合并默认值的输入参数。"""
     return _context()['parameters']
 
 
-def job_id():
+def job_id() -> str:
     """返回执行服务与当前任务共用的作业标识。"""
     return _context()['job_id']
 
 
-def set_result(result):
+def set_result(result: dict) -> None:
     """原子替换当前作业的 JSON 对象结果，上限为 1 MiB。"""
     _context()
     destination = os.environ.get('WBOT_RUN_RESULT')

@@ -28,7 +28,14 @@ SKIP_DIRECTORIES = {'__pycache__', 'site-packages', 'test', 'tests', 'idlelib', 
 
 
 def run(command, **options):
-    return subprocess.run(command, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), **options)
+    try:
+        return subprocess.run(command, check=True, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), **options)
+    except subprocess.CalledProcessError as error:
+        for output in (error.stdout, error.stderr):
+            if output:
+                print(output.decode('utf-8', errors='replace') if isinstance(output, bytes) else output,
+                      file=sys.stderr, flush=True)
+        raise
 
 
 def copy_tree(source, destination):
@@ -179,7 +186,7 @@ print(json.dumps({'python':sys.version.split()[0], 'wbot':m.version('wbot'), 'lx
     run([str(interpreter), '-I', '-X', 'utf8', '-m', 'ensurepip', '--version'], cwd=source_root,
         capture_output=True, text=True, encoding='utf-8', timeout=20)
     with tempfile.TemporaryDirectory(prefix='assistant-bundle-check-') as temporary:
-        state = Path(temporary) / 'state'
+        state = Path(temporary).resolve() / 'state'
         command = [str(interpreter), '-m', 'app.assistant']
         try:
             run([*command, 'start', '--state-dir', str(state), '--port', '0'], cwd=source_root,
@@ -241,7 +248,7 @@ def verify_remote_connection(bundle):
     from app.oc.service import OcService
 
     with tempfile.TemporaryDirectory(prefix='assistant-remote-check-') as temporary:
-        root = Path(temporary)
+        root = Path(temporary).resolve()
         state = root / 'assistant'
         service = OcService(root / 'oc')
         gateway = create_agent_server(service, port=0)
@@ -313,7 +320,7 @@ def verify_desktop(bundle):
     from app.assistant.lifecycle import _read_metadata, _request, service_status
 
     with tempfile.TemporaryDirectory(prefix='assistant-desktop-check-') as temporary:
-        state = Path(temporary) / 'state'
+        state = Path(temporary).resolve() / 'state'
         environment = os.environ.copy()
         windows = Path(os.environ['SYSTEMROOT'])
         environment.update(QT_QPA_PLATFORM='offscreen',

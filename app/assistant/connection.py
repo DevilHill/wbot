@@ -37,18 +37,28 @@ class ConnectionService:
         self._thread.start()
 
     @contextmanager
-    def remote_session(self):
-        """一次开发者操作固定使用当前已批准身份，期间不能切换后台。"""
+    def settings_session(self):
+        """固定本次操作的连接配置，避免检查或安装途中切换更新来源。"""
         if not self._operation.acquire(timeout=6):
             raise RuntimeError('正在与 OC 同步任务，请稍后重试')
         try:
-            settings = self.store.settings()
-            if (self._stop.is_set() or not settings or not settings['enabled']
-                    or settings['binding_state'] != 'approved'):
-                raise PermissionError('请先在 Assistant 连接 OC，并等待管理员批准设备绑定')
-            yield settings, GatewayClient(settings, stop=self._stop)
+            if self._stop.is_set():
+                raise RuntimeError('Assistant 连接服务正在停止')
+            yield self.store.settings()
         finally:
             self._operation.release()
+
+    @contextmanager
+    def remote_session(self):
+        """一次开发者操作固定使用当前已批准身份，期间不能切换后台。"""
+        with self.settings_session() as settings:
+            self.require_approved(settings)
+            yield settings, GatewayClient(settings, stop=self._stop)
+
+    @staticmethod
+    def require_approved(settings):
+        if not settings or not settings['enabled'] or settings['binding_state'] != 'approved':
+            raise PermissionError('请先在 Assistant 连接 OC，并等待管理员批准设备绑定')
 
     def close(self):
         self._stop.set()

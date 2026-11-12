@@ -395,12 +395,24 @@ if not make_app_icon().pixmap(256, 256).save(sys.argv[1], 'ICO'):
     return path
 
 
+def write_update_manifest(archive):
+    from app.assistant_release import UPDATE_FILE, file_digest, inspect_release
+    archive = Path(archive)
+    manifest = dict(inspect_release(archive), asset_name=archive.name,
+                    size=archive.stat().st_size, sha256=file_digest(archive))
+    destination = archive.parent / UPDATE_FILE
+    destination.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+    return destination
+
+
 def main(argv=None):
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, 'reconfigure'):
             stream.reconfigure(encoding='utf-8')
     parser = argparse.ArgumentParser(description='构建 Qt Assistant Windows 便携目录')
     parser.add_argument('--distpath', type=Path, default=ROOT / 'dist')
+    parser.add_argument('--workpath', type=Path, default=ROOT / 'build' / 'assistant-pyinstaller',
+                        help='PyInstaller 临时构建目录')
     parser.add_argument('--verify-only', action='store_true', help='只验证已有便携包的 Qt、Python 与真实执行链路')
     parser.add_argument('--release-notes', type=Path, help='UTF-8 更新说明文本（最多 8000 字）')
     args = parser.parse_args(argv)
@@ -416,7 +428,7 @@ def main(argv=None):
     for module in ('PySide6', 'PyInstaller', 'lxml'):
         if importlib.util.find_spec(module) is None:
             parser.error(f'缺少 {module}；请安装 requirements-assistant.txt 和 PyInstaller')
-    work = ROOT / 'build' / 'assistant-pyinstaller'
+    work = args.workpath.resolve()
     work.mkdir(parents=True, exist_ok=True)
     # 仅在构建子进程中清理搜索路径，避免把其他桌面工具的同名 ICU DLL 打进 Qt 包。
     environment = os.environ.copy()
@@ -439,12 +451,12 @@ def main(argv=None):
     verify_remote_connection(bundle)
     remove_generated_bytecode(bundle)
     from app.assistant.version import VERSION
-    from app.assistant_release import release_metadata, RELEASE_FILE, PLATFORM
+    from app.assistant_release import release_metadata, RELEASE_FILE, PLATFORM, ARCHIVE_NAME
     notes = args.release_notes.read_text(encoding='utf-8') if args.release_notes else 'Assistant 界面、执行与在线更新功能改进。'
     release = release_metadata(dict(schema=1, product='wbot-assistant', platform=PLATFORM, version=VERSION, notes=notes))
     (bundle / RELEASE_FILE).write_text(json.dumps(release, ensure_ascii=False), encoding='utf-8')
     write_manifest(bundle)
-    archive = destination / 'WBotAssistant-windows-x64.zip'
+    archive = destination / ARCHIVE_NAME
     # 直接继承输出目录 ACL；Windows 的私有临时目录会把 ZIP 的读取权限一并带走。
     temporary_archive = destination / f'.WBotAssistant-{uuid4().hex}.zip'
     try:
@@ -453,8 +465,9 @@ def main(argv=None):
         Path(prepared).replace(archive)
     finally:
         temporary_archive.unlink(missing_ok=True)
+    update_manifest = write_update_manifest(archive)
     print(json.dumps({'directory': str(bundle), 'executable': str(bundle / 'WBotAssistant.exe'),
-                      'archive': str(archive)}, ensure_ascii=False))
+                      'archive': str(archive), 'update_manifest': str(update_manifest)}, ensure_ascii=False))
     return 0
 
 

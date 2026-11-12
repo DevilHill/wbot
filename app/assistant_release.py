@@ -11,6 +11,8 @@ MAX_EXPANDED_BYTES = 512 * 1024 * 1024
 RELEASE_FILE = 'assistant-release.json'
 CHECKSUM_FILE = 'checksums.sha256.json'
 PLATFORM = 'windows-x64'
+ARCHIVE_NAME = 'WBotAssistant-windows-x64.zip'
+UPDATE_FILE = 'assistant-update.json'
 
 
 def version_key(value):
@@ -35,6 +37,14 @@ def release_metadata(value):
     if not isinstance(value.get('notes'), str) or len(value['notes']) > 8000:
         raise ValueError('更新说明须为不超过 8000 字的文本')
     return {key: value[key] for key in ('schema', 'product', 'platform', 'version', 'notes')}
+
+
+def update_metadata(value):
+    metadata = release_metadata(value)
+    if (type(value.get('size')) is not int or not 0 < value['size'] <= MAX_RELEASE_BYTES
+            or not isinstance(value.get('sha256'), str) or not re.fullmatch(r'[0-9a-f]{64}', value['sha256'])):
+        raise ValueError('更新包大小或 SHA-256 校验值无效')
+    return dict(metadata, size=value['size'], sha256=value['sha256'])
 
 
 def _relative_name(name):

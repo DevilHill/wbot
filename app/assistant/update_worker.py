@@ -88,6 +88,18 @@ def launch_gui(install, state, environment):
                             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
 
 
+def disable_error_dialogs():
+    if os.name != 'nt':
+        return
+    from ctypes import wintypes
+    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
+    kernel.GetErrorMode.restype = wintypes.UINT
+    kernel.SetErrorMode.argtypes = [wintypes.UINT]
+    kernel.SetErrorMode.restype = wintypes.UINT
+    # 损坏的 EXE 或缺失 DLL 必须返回错误供回滚处理，不能等待不可见的系统对话框。
+    kernel.SetErrorMode(kernel.GetErrorMode() | 0x0001 | 0x0002)
+
+
 def read_service(state):
     return json.loads((state / 'service.json').read_text(encoding='utf-8'))
 
@@ -124,6 +136,7 @@ def wait_for_gui(state, process, token, version):
 
 
 def run(plan):
+    disable_error_dialogs()
     install, staged, backup = validate_plan(plan)
     state = Path(plan['state_dir'])
     result_path = state / 'update-result.json'

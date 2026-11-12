@@ -1,2 +1,2 @@
 """Assistant desktop and execution service release version."""
-VERSION = '0.9.0'
+VERSION = '0.10.0'

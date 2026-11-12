@@ -79,3 +79,19 @@ class UpdateCardTests(unittest.TestCase):
             'tests.test_assistant_qt_updates.UpdateCardTests.test_only_accepted_install_for_this_gui_requests_exit_once',
             '-q'], cwd=Path(__file__).resolve().parents[1], capture_output=True, timeout=20)
         self.assertEqual(result.returncode, 0, result.stderr.decode('utf-8', errors='replace'))
+
+    def test_sources_size_plain_text_notes_and_failed_check(self):
+        card = UpdateCard(Client())
+        self.addCleanup(self.dispose, card)
+        release = {'version': '0.10.0', 'notes': '<b>更新说明</b>', 'size': 2 * 1024 * 1024}
+        card._received({'update': {'status': 'available', 'source': 'github',
+                                   'install_supported': True, 'release': release}})
+        self.assertIn('GitHub', card.source.text())
+        self.assertIn('2.0 MiB', card.notes.text())
+        self.assertIn('<b>更新说明</b>', card.notes.text())
+        card._received({'update': {'status': 'failed', 'source': 'oc', 'release': None,
+                                   'install_supported': True, 'message': 'OC 连接失败，请重试'}})
+        self.assertIn('OC', card.source.text())
+        self.assertIn('连接失败', card.message.text())
+        self.assertTrue(card.action_button.isHidden())
+        self.assertTrue(card.check_button.isEnabled())

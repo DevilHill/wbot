@@ -1,4 +1,7 @@
 from pathlib import Path
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -92,6 +95,28 @@ class UpdateTests(unittest.TestCase):
 
 
 class UpdateWorkerTests(unittest.TestCase):
+    @unittest.skipUnless(os.name == 'nt', 'Windows 更新进程行为')
+    def test_invalid_gui_returns_error_without_blocking_on_system_dialog(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'WBotAssistant.exe').write_bytes(b'INTENTIONAL INVALID GUI FOR ROLLBACK TEST')
+            script = '''import os, sys
+from pathlib import Path
+from app.assistant.update_worker import disable_error_dialogs, launch_gui
+disable_error_dialogs()
+try:
+    launch_gui(Path(sys.argv[1]), Path(sys.argv[1]), dict(os.environ))
+except OSError:
+    print('invalid executable rejected')
+else:
+    raise SystemExit('Invalid executable unexpectedly started')
+'''
+            result = subprocess.run([sys.executable, '-c', script, str(root)],
+                                    capture_output=True, timeout=10,
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+            self.assertEqual(result.returncode, 0, result.stderr.decode(errors='replace'))
+            self.assertIn(b'invalid executable rejected', result.stdout)
+
     def test_directory_swap_and_rollback_preserve_old_bytes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory).resolve()

@@ -148,7 +148,9 @@ with tempfile.TemporaryDirectory(prefix='online-update-check-', dir=ROOT / 'buil
         until(lambda: json.loads((state / 'update-result.json').read_text(encoding='utf-8')).get('status') == 'rolled_back', 100)
         until(lambda: call(state, '/api/health')['version'] == target_version and not call(state, '/api/health')['updating'])
         assert call(state, '/api/jobs/' + job['id'])['job']['result'] == {'retained': True}
-        assert (state / '.desktop.lock').exists()
+        # 回滚后台先于 Qt 界面就绪；必须等待新界面的锁，不能把被终止界面留下的锁当作启动成功。
+        until(lambda: (state / '.desktop.lock').exists()
+              and int((state / '.desktop.lock').read_text().splitlines()[0]) != gui_pid)
         print('PASS: invalid new GUI rolled back to original program and restarted; task history retained', flush=True)
     except Exception:
         for path in root.glob('.wbot-update-*/worker*.json'):

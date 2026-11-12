@@ -1,0 +1,106 @@
+name: Build and publish Assistant
+
+on:
+  push:
+    tags:
+      - 'assistant-v*'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: assistant-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Check version and release notes
+        shell: pwsh
+        run: |
+          $version = python -c "from app.assistant.version import VERSION; from app.assistant_release import version_key; version_key(VERSION); print(VERSION)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "assistant-v$version") {
+            throw 'Tag must match app/assistant/version.py'
+          }
+          if (-not (Test-Path -LiteralPath "docs/releases/assistant-$version.txt")) {
+            throw 'Missing release notes for this version'
+          }
+          "ASSISTANT_VERSION=$version" >> $env:GITHUB_ENV
+      - name: Install build dependencies
+        run: python -m pip install -r requirements-assistant.txt pyinstaller .
+      - name: Test update and connection behavior
+        run: >-
+          python -m unittest
+          tests.test_assistant_github_updates
+          tests.test_assistant_updates
+          tests.test_assistant_releases
+          tests.test_assistant_connection
+          tests.test_assistant_packaging
+          tests.test_assistant_qt_updates -v
+      - name: Build and verify portable release
+        shell: pwsh
+        run: python build_assistant.py --distpath dist/assistant-release --release-notes "docs/releases/assistant-$env:ASSISTANT_VERSION.txt"
+      - name: Verify real upgrade and rollback
+        run: python tools/verify_assistant_updates.py dist/assistant-release/WBotAssistant
+      - uses: actions/upload-artifact@v4
+        with:
+          name: assistant-release
+          path: |
+            dist/assistant-release/WBotAssistant-windows-x64.zip
+            dist/assistant-release/assistant-update.json
+          if-no-files-found: error
+
+  publish:
+    needs: build
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/assistant-v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: assistant-release
+          path: release
+      - name: Verify artifact and prepare notes
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+          manifest = json.loads(Path('release/assistant-update.json').read_text(encoding='utf-8'))
+          archive = Path('release/WBotAssistant-windows-x64.zip')
+          if (os.environ['RELEASE_TAG'] != 'assistant-v' + manifest['version']
+                  or manifest['asset_name'] != archive.name
+                  or manifest['size'] != archive.stat().st_size
+                  or manifest['sha256'] != hashlib.sha256(archive.read_bytes()).hexdigest()):
+              raise SystemExit('Release artifact does not match its manifest or tag')
+          Path('release-notes.txt').write_text(manifest['notes'], encoding='utf-8')
+          PY
+      - name: Upload draft release then publish
+        shell: bash
+        run: |
+          gh release create "$RELEASE_TAG" \
+            release/WBotAssistant-windows-x64.zip release/assistant-update.json \
+            --verify-tag --draft --latest=false \
+            --title "WBot Assistant ${RELEASE_TAG#assistant-v}" --notes-file release-notes.txt
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false

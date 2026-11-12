@@ -147,16 +147,26 @@ Qt 依赖随桌面入口分发，未安装到任务 Python 中。请用 EXE 打�
 
 产物为 `dist/WBotAssistant/` 和 `dist/WBotAssistant-windows-x64.zip`。构建脚本会检查内置 Python、真实后台任务、Qt 初始化和重复启动唤起；已有构建也可运行 `python build_assistant.py --verify-only`。便携包包含版本元数据和文件校验清单，可由 OC 发布在线更新。这仍是便携预览，尚无安装向导、开机启动或 Windows 服务注册，企业部署与升级验收仍未完成。
 
-## OC 在线更新
+## 在线更新（GitHub / OC）
+
+从 Assistant 0.10.0 起，尚未配置 OC 的客户端直接从公开仓库 `DevilHill/wbot` 的 GitHub Releases 检查正式版本，不需要 GitHub Token。界面显示更新来源、更新说明和包大小。只接受 `assistant-v主版本.次版本.修订版本` 标签、Windows x64 附件和完整更新清单；忽略草稿、预发布和其他产品的 Release，按数字版本比较并处理分页。网络、限流和发布包异常会显示检查失败，不会误报为已是最新版本。
+
+只要保存过 OC 连接配置，更新仍通过 OC 获取；待批准、断线、暂停连接、被拒绝或撤销授权时不会自动切换 GitHub。下载和安装前再次确认来源、发布状态、版本信息和校验值，下载后新配置 OC 也会阻止安装原来的 GitHub 更新。当前没有清除 OC 管理状态或手动切换更新源的界面。
+
+旧版独立客户端需要手动安装 0.10.0 才能使用 GitHub 检查更新；已绑定 OC 的旧版可以由管理员上传 0.10.0 ZIP 后更新。当前只在用户点击“检查更新”时查询，不自动下载或安装。
 
 从 Assistant 0.7.0 起支持用户确认的在线更新。更早的便携包没有更新入口，首次仍需手动安装 0.7.0，并在任务结束后停止旧后台、启动新版。源码运行可检查版本，不会自动替换开发目录。
 
-1. 管理员在 OC 的“客户端更新”上传构建生成的 ZIP，核对版本与说明后发布给全部已批准设备或指定设备。
+1. 独立用户从 GitHub 获取已发布版本；OC 管理员在“客户端更新”上传构建生成的 ZIP，核对版本与说明后发布给全部已批准设备或指定设备。
 2. 在 Assistant“设置 → 软件更新”点击“检查更新”，查看新版本和说明，再点击“下载更新”。下载与校验在后台完成。
 3. 任务结束后点击“更新并重启”。执行端在锁内检查空闲状态，并暂停接受新任务；忙碌时拒绝安装并保留已下载内容，需要用户稍后重试。
 4. 独立更新程序等待旧界面退出，停止旧后台，将旧程序保存在同级 `.wbot-backup-*` 目录后替换程序。新版后台和界面确认就绪后恢复接单；启动检查失败会恢复旧程序并重新启动。
 
 跨电脑更新要求 HTTPS OC 接入地址和受信任证书；仅回环地址允许 HTTP 联调。更新请求复用已批准的设备身份，下载不跟随重定向。安装前再次核对发布授权、包的 SHA-256、文件清单和待安装内容；撤回版本会阻止后续安装申请，已经接受的安装不会被远程取消。管理员上传的是可执行软件，应只发布可信构建。当前没有独立代码签名或自动信任自签名证书。
+
+GitHub 下载使用独立客户端，允许有限次数的 GitHub HTTPS 附件跳转，支持系统代理，不发送 OC 凭据或 GitHub Token。清单与附件大小、SHA-256 和 ZIP 内元数据必须一致，下载失败会清理本次不完整文件。GitHub 官方发布的信任依赖 HTTPS 和仓库发布权限；SHA-256 是内容一致性检查，不是独立发布者签名。
+
+独立更新进程关闭 Windows 严重错误和崩溃对话框，让损坏的启动文件及时返回错误并进入回滚，避免更新停留在等待系统对话框的状态。
 
 更新需要程序所在目录可写、至少 1 GiB 可用空间，且数据目录位于程序目录之外。默认 `%USERPROFILE%\.wbot-assistant` 符合要求。连接配置、包和作业记录保留在数据目录；更新替换整套程序及内置 Python，后续业务依赖应包含在发布包中，临时安装在旧程序目录里的依赖不会自动迁移。
 
@@ -165,6 +175,23 @@ Qt 依赖随桌面入口分发，未安装到任务 Python 中。请用 EXE 打�
 构建版本由 `app/assistant/version.py` 管理，使用 `主版本.次版本.修订版本`，相同版本不可覆盖。可以用 `python build_assistant.py --release-notes path/to/notes.txt` 指定 UTF-8 更新说明（最多 8000 字）。上传旧版不含 `assistant-release.json` 的 ZIP 会被拒绝。
 
 [软件更新界面预览](images/assistant-updates/updates-light-480.png)（示例数据）。
+
+### 发布 Assistant 到 GitHub
+
+1. 修改 `app/assistant/version.py`，增加对应的 UTF-8 更新说明 `docs/releases/assistant-<版本>.txt`，提交并推送代码。
+2. 推送与代码版本一致的标签，例如 `assistant-v0.10.0`，触发 `.github/workflows/publish-assistant.yml`。普通分支提交不会发布版本。
+3. Windows 工作流运行更新、连接和界面测试，再调用现有构建验证。产物包括 `WBotAssistant-windows-x64.zip` 和 `assistant-update.json`，外部清单由实际 ZIP 自动生成，包含版本、平台、说明、大小和 SHA-256。
+4. 发布任务核对标签与产物，先创建草稿并上传两个附件，成功后再转为正式版。不会改动整个仓库的 Latest 标记，客户端自行筛选 Assistant 版本。同名 Release 已存在时发布失败，不覆盖原有附件；若失败留下未发布草稿，需核查并删除该草稿后再重跑，正式版修复必须使用新版本号。
+
+工作流只使用内置 `GITHUB_TOKEN`，发布任务需要仓库 `contents: write` 权限，无需另设个人 Token。Actions 中手动运行此工作流只构建并保存 artifact，不发布版本。第一期 OC 继续使用上传 ZIP 的方式，尚未自动同步 GitHub。
+
+本地构建示例：
+
+```powershell
+python build_assistant.py --distpath dist/assistant-0.10.0 --release-notes docs/releases/assistant-0.10.0.txt
+```
+
+同一份说明同时写入 ZIP 内元数据、外部清单和 GitHub Release 正文。发布后的标签、附件与版本号应保持不变。
 
 开发者可在已安装 Qt 的 Windows 构建环境执行 `python tools/verify_assistant_updates.py dist/WBotAssistant`。该验证使用独立临时目录、临时 OC 和真实便携程序，检查忙碌拒绝、通过 Qt 按钮正常退出并升级、数据保留，以及注入无效新版界面后的回退；不会连接日常使用的 Assistant 数据目录。
 

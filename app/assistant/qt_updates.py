@@ -25,7 +25,9 @@ class UpdateCard(QFrame):
         layout.addWidget(label('软件更新', 'fieldLabel'))
         self.version = label(f'Assistant {VERSION}', 'emptyTitle')
         layout.addWidget(self.version)
-        self.message = label('从已绑定的 OC 获取管理员发布的版本。', 'hint', True)
+        self.source = label('正在读取更新来源…', 'hint', True)
+        layout.addWidget(self.source)
+        self.message = label('点击检查更新获取可用的正式版本。', 'hint', True)
         layout.addWidget(self.message)
         self.notes = label('', 'subtitle', True)
         self.notes.hide()
@@ -110,10 +112,12 @@ class UpdateCard(QFrame):
         self.action_button.setVisible(bool(release) and update.get('install_supported', False))
         self.action_button.setText('更新并重启' if self._ready else '下载更新')
         self.version.setText(f'Assistant {update.get("version", VERSION)}')
+        self.source.setText('更新来源：GitHub · DevilHill/wbot' if update.get('source') == 'github'
+                            else '更新来源：OC · 管理员发布')
         if release:
-            self.notes.setText(f'新版本 {release["version"]}\n{release["notes"]}')
+            self.notes.setText(f'新版本 {release["version"]} · {release["size"] / (1024 * 1024):.1f} MiB\n{release["notes"]}')
         self.notes.setVisible(bool(release))
-        messages = {'idle': '从已绑定的 OC 获取管理员发布的版本。', 'checking': '正在检查更新…',
+        messages = {'idle': '点击检查更新获取可用的正式版本。', 'checking': '正在检查更新…',
                     'available': '有新版本可用，可先下载，任务结束后再安装。',
                     'downloading': '正在下载并校验更新包…', 'installing': '正在更新并重启…'}
         message = update.get('message') or messages.get(status, '')

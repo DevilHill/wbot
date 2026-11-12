@@ -1,6 +1,8 @@
-# WBot · Studio、OC 与 Assistant 开发预览
+# WBot · Studio、Assistant 与 Python SDK
 
-WBot 提供 Python 自动化开发、管理与执行工具。Studio 以 VS Code 插件为主入口，支持项目初始化和发布包构建；OC 采用 React 管理界面，可审批设备绑定、上传包、部署流程并向本机或跨电脑 Assistant 手动派发作业；Assistant 使用 Qt 小窗口和系统托盘，负责本机使用、实际执行、日志与结果回报。产品结构为 Studio、OC、Assistant 三端，执行服务属于 Assistant 内部。当前为开发预览，企业账号权限、定时调度与完整生产部署仍未交付。
+WBot 提供 Python 自动化开发与执行工具。本仓库维护 Studio（VS Code 插件）、Assistant 及其内部 Runner、Python SDK 和浏览器扩展。Studio 支持项目初始化和发布包构建；Assistant 使用 Qt 小窗口和系统托盘，负责本机使用、实际执行、日志与结果回报。
+
+**OC 管理端已拆分至私有仓库 [DevilHill/wbot_oc](https://github.com/DevilHill/wbot_oc)**，其源码、架构规范与云端自动部署以该仓库为准，需要相应访问权限。本仓库现有 Python OC、`oc-web/` 及旧部署资料暂作历史兼容保留，后续另行移除；新增 OC 开发与生产发布请使用 `wbot_oc`。
 
 原有独立 Python 自动化编码桌面继续提供：**文件树、多标签、Monaco 编辑器、保存、运行/停止、实时日志**。抓取浏览器元素后，可将 XPath 插入代码，并在右侧工作台校验、同步高亮。
 
@@ -14,8 +16,8 @@ WBot 提供 Python 自动化开发、管理与执行工具。Studio 以 VS Code 
 ## 获取代码
 
 ```powershell
-git clone https://github.com/DevilHill/xpath_tool.git
-cd xpath_tool
+git clone https://github.com/DevilHill/wbot.git
+cd wbot
 ```
 
 ## 环境
@@ -24,7 +26,7 @@ cd xpath_tool
 - Assistant 桌面界面使用 [PySide6 / Qt Widgets](https://doc.qt.io/qtforpython-6/)，依赖见 [requirements-assistant.txt](requirements-assistant.txt)。
 - 原有编码桌面的 pywebview 窗口使用 [WebView2 Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/)。
 - Chrome / Edge 与配套扩展用于网页抓取；纯 Python 脚本无需浏览器。
-- OC 前端构建和测试需要 [Node.js 22.12+ 与 npm](https://nodejs.org/)，依赖由 [oc-web/package-lock.json](oc-web/package-lock.json) 固定。
+- 运行历史 OC 前端兼容测试需要 [Node.js 22.12+ 与 npm](https://nodejs.org/)，依赖由 [oc-web/package-lock.json](oc-web/package-lock.json) 固定；新版 OC 环境要求见 `wbot_oc`。
 
 ## 启动与使用
 
@@ -73,7 +75,9 @@ Windows 便携版完整解压后，双击 `WBotAssistant/WBotAssistant.exe` 打�
 
 VS Code 新增 **WBot: 初始化自动化项目** 和 **WBot: 构建自动化发布包**。当前已有本地包运行和远程手动派发，没有组织用户登录、定时调度、自动依赖安装或依赖环境隔离；同一服务一次只运行一个任务。完整命令、清单、`wbot.runtime` API 和使用限制见 [Assistant 指南](docs/assistant.md)。
 
-## OC React 管理端
+## OC React 管理端（历史兼容预览）
+
+以下命令对应本仓库保留的旧 Python OC。新版管理端的启动、部署与迁移说明见 [wbot_oc README](https://github.com/DevilHill/wbot_oc#readme)；本仓库不再作为 OC 生产发布来源。
 
 共享 XPath 元素现支持受保护的主分支、个人分支、版本记录与合并申请。VS Code 插件 0.5.0 可从当前元素库查看差异、提交并发起申请；OC 管理员可处理冲突、合并、关闭申请或恢复历史快照。通信复用已批准的 Assistant 设备连接，现阶段作者按设备记录。操作步骤和本地修改保护规则见 [共享元素指南](docs/shared-elements.md)。
 
@@ -111,6 +115,6 @@ Monaco 固定为 **0.57.0**，资源及许可证位于 [vendor/monaco](app/web/v
 
 ## 贡献与许可
 
-通过 [Issues](https://github.com/DevilHill/xpath_tool/issues) 提交问题，附复现步骤和脱敏日志。PR 请说明验证结果；定位规则应保持 Python / JavaScript 两端一致。
+通过 [Issues](https://github.com/DevilHill/wbot/issues) 提交问题，附复现步骤和脱敏日志。PR 请说明验证结果；定位规则应保持 Python / JavaScript 两端一致。
 
 本项目采用 [MIT 许可证](LICENSE)。wbot 为独立实现，不声称完整兼容 xbot。Monaco 的第三方许可见其 [LICENSE](app/web/vendor/monaco/LICENSE) 和 [ThirdPartyNotices.txt](app/web/vendor/monaco/ThirdPartyNotices.txt)。

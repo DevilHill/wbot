@@ -1,5 +1,7 @@
 # WBot OC 管理与设备接入预览
 
+**本文保留的是 wbot 仓库中的历史 Python OC 兼容说明。** OC 的正式源码、架构规范与云端自动部署已迁至私有仓库 [DevilHill/wbot_oc](https://github.com/DevilHill/wbot_oc)，新版启动、数据迁移和部署请以该仓库文档为准，需要相应访问权限。公开 `wbot` 仓库继续维护 Assistant / Runner、Studio 与 Python SDK；旧 OC 代码暂时保留，后续另行移除，不再作为生产发布来源。
+
 OC 提供 Robot 连接、Environment 环境、Asset 配置、自动化包、流程部署、运行队列和运行日志的统一入口。管理界面采用 **React + TypeScript + Vite**；Python 服务保存配置与任务，连接本机 Assistant，或接受其他电脑上的 Assistant 申请绑定并在批准后派发任务。自动化脚本由 Assistant 的独立任务进程执行。
 
 管理页面和管理 API 默认只监听 OC 本机；云端部署通过 HTTPS 访问，使用 OC 自带账号登录与管理员、开发者、操作员、只读用户四类角色。跨电脑 Assistant 使用独立的设备接口。一个 OC 可管理本机目录接入与已批准的远程绑定。界面中的“默认组织”是预览范围标识，设备绑定审批不等于组织账号或用户权限系统。完整企业私有部署与调度目标见 [产品需求架构](product-requirements.md)。

@@ -35,11 +35,12 @@ async function runProjectCommand(options) {
   const script = path.join(options.runtime, 'app', 'automation_package.py');
   const args = ['-X', 'utf8', script, options.action, options.project];
   if (options.name) args.push('--name', options.name);
+  if (options.withRuntime) args.push('--with-runtime');
   let stdout;
   try {
     ({stdout} = await executeFile(options.python, args, {
       cwd:options.runtime, windowsHide:true, encoding:'utf8',
-      timeout:120000, maxBuffer:2 * 1024 * 1024,
+      timeout:600000, maxBuffer:4 * 1024 * 1024,
       env:{...process.env, PYTHONIOENCODING:'utf-8'}
     }));
   } catch (error) {
@@ -58,7 +59,7 @@ function createProjectCommands({vscode, runtime, output, pythonExecutable}) {
     const title = action === 'init' ? 'WBot：初始化自动化项目' : 'WBot：构建自动化发布包';
     output.appendLine(`${title} · ${project}`);
     return vscode.window.withProgress({location:vscode.ProgressLocation.Notification, title},
-      () => runProjectCommand({python, runtime, action, project, name}));
+      () => runProjectCommand({python, runtime, action, project, name, withRuntime:action === 'build'}));
   }
 
   async function initProject() {

@@ -8,7 +8,7 @@ import threading
 import time
 from uuid import uuid4
 
-from app.automation_package import MAX_PACKAGE_BYTES, inspect_package, resolve_parameters
+from app.automation_package import MAX_ARCHIVE_BYTES, inspect_package, resolve_parameters
 from .agent_service import AgentService, TERMINAL_STATES
 from .element_service import ElementRepositoryService
 from .assistant_releases import AssistantReleases
@@ -63,8 +63,8 @@ class OcService:
 
     def import_package(self, path):
         source = Path(path)
-        if source.stat().st_size > MAX_PACKAGE_BYTES + 4 * 1024 * 1024:
-            raise ValueError('发布包超过 68 MiB')
+        if source.stat().st_size > MAX_ARCHIVE_BYTES:
+            raise ValueError('发布包超过 516 MiB')
         with self._lock, tempfile.TemporaryDirectory(prefix='.import-', dir=self.packages_dir) as temporary:
             staged = Path(temporary) / 'package.zip'
             shutil.copyfile(source, staged)

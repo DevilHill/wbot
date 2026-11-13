@@ -28,8 +28,9 @@ MAX_FILES = 1000
 MAX_FILE_BYTES = 16 * 1024 * 1024
 MAX_PACKAGE_BYTES = 64 * 1024 * 1024
 MAX_METADATA_BYTES = 256 * 1024
+MAX_ARCHIVE_BYTES = 516 * 1024 * 1024
 MANIFEST_FIELDS = {'schemaVersion', 'name', 'version', 'entry', 'files',
-                   'parameters', 'requirements', 'elements'}
+                   'parameters', 'requirements', 'elements', 'runtime'}
 PARAMETER_FIELDS = {'type', 'required', 'default', 'description', 'title'}
 TRANSIENT_ELEMENT_FIELDS = {'browserId', 'tabId', 'frameId', 'documentId', 'parentFrameId', 'lastPickAt'}
 PACKAGE_VERSION = r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?(?:\+[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?'
@@ -141,22 +142,31 @@ def _validate_requirements(requirements):
 
 def validate_manifest(manifest):
     """Validate the portable contract without reading files or changing input."""
-    _check_fields(manifest, MANIFEST_FIELDS, MANIFEST_FIELDS - {'elements'}, MANIFEST)
-    if type(manifest['schemaVersion']) is not int or manifest['schemaVersion'] != 1:
-        raise ValueError('仅支持 schemaVersion=1')
+    _check_fields(manifest, MANIFEST_FIELDS, MANIFEST_FIELDS - {'elements', 'runtime'}, MANIFEST)
+    if type(manifest['schemaVersion']) is not int or manifest['schemaVersion'] not in (1, 2):
+        raise ValueError('仅支持 schemaVersion=1 或 2')
+    portable = manifest['schemaVersion'] == 2
+    if portable:
+        from app.portable_package import validate_runtime
+        validate_runtime(manifest.get('runtime'))
+    elif 'runtime' in manifest:
+        raise ValueError('runtime 需要 schemaVersion=2')
     name, version = manifest['name'], manifest['version']
     if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]{0,79}', name):
         raise ValueError('name 必须以字母或数字开头，仅包含字母、数字、下划线和连字符，最多 80 字符')
     if not isinstance(version, str) or len(version) > 80 or not re.fullmatch(PACKAGE_VERSION, version):
         raise ValueError('version 必须是固定的语义版本，如 1.0.0')
     files = manifest['files']
-    if not isinstance(files, list) or not files or len(files) + 2 > MAX_FILES:
-        raise ValueError(f'files 必须是非空文件白名单，包总文件数不得超过 {MAX_FILES}')
+    maximum = 20000 if portable else MAX_FILES
+    if not isinstance(files, list) or not files or len(files) + 2 > maximum:
+        raise ValueError(f'files 必须是非空文件白名单，包总文件数不得超过 {maximum}')
     _check_file_paths([MANIFEST, CHECKSUMS, *files])
     entry = manifest['entry']
     _relative_path(entry)
     if not entry.endswith('.py') or entry not in files:
         raise ValueError('entry 必须是 files 中声明的 Python (.py) 文件')
+    if portable and (manifest['runtime']['executable'] not in files or entry.casefold().startswith('_runtime/')):
+        raise ValueError('发布包必须包含运行环境，入口文件必须位于运行环境之外')
     _validate_parameters(manifest['parameters'])
     _validate_requirements(manifest['requirements'])
     if 'elements' in manifest:
@@ -164,6 +174,8 @@ def validate_manifest(manifest):
         _relative_path(elements)
         if not elements.endswith('.json') or elements not in files:
             raise ValueError('elements 必须是 files 中声明的 JSON 相对路径')
+        if portable and elements.casefold().startswith('_runtime/'):
+            raise ValueError('元素库必须位于运行环境之外')
     return manifest
 
 
@@ -368,12 +380,18 @@ def _verified_package(archive):
 
 def inspect_package(archive):
     """Verify archive boundaries, manifest and every checksum without extracting."""
+    from app.portable_package import is_portable_package, verify_portable_package
+    if is_portable_package(archive):
+        return verify_portable_package(archive)
     manifest, _contents = _verified_package(archive)
     return manifest
 
 
 def extract_package(archive, destination):
     """Verify completely, then install the verified bytes into a new directory."""
+    from app.portable_package import is_portable_package, verify_portable_package
+    if is_portable_package(archive):
+        return verify_portable_package(archive, destination)
     manifest, contents = _verified_package(archive)
     _write_new_directory(destination, contents)
     return manifest
@@ -388,6 +406,7 @@ def main(argv=None):
     build = commands.add_parser('build')
     build.add_argument('path')
     build.add_argument('--output')
+    build.add_argument('--with-runtime', action='store_true', help='打包当前项目 Python 与依赖（Windows x64）')
     inspect = commands.add_parser('inspect')
     inspect.add_argument('archive')
     arguments = parser.parse_args(argv)
@@ -398,7 +417,11 @@ def main(argv=None):
         if arguments.command == 'init':
             result = create_project(arguments.path, arguments.name)
         elif arguments.command == 'build':
-            archive = build_package(arguments.path, arguments.output)
+            if arguments.with_runtime:
+                from app.portable_builder import build_portable_package
+                archive = build_portable_package(arguments.path, arguments.output)
+            else:
+                archive = build_package(arguments.path, arguments.output)
             result = {'path': str(archive), 'manifest': inspect_package(archive)}
         else:
             result = inspect_package(arguments.archive)

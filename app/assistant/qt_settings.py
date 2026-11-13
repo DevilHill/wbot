@@ -11,6 +11,7 @@ from .qt_dialogs import label, ThemedComboBox
 from .qt_theme import display_time, make_symbol_icon, theme_mode, set_theme_mode
 from .qt_theme import reduced_motion, set_reduced_motion
 from .qt_updates import UpdateCard
+from .qt_browser import BrowserExtensionCard
 
 
 BINDING_LABELS = {'unconfigured': '尚未连接', 'connecting': '正在提交申请',
@@ -72,7 +73,7 @@ class SettingsPage(QWidget):
         header.addStretch()
         header.addWidget(label('设置', 'dialogTitle'))
         layout.addLayout(header)
-        layout.addWidget(label('外观与管理平台连接', 'subtitle'))
+        layout.addWidget(label('外观、浏览器扩展与管理平台连接', 'subtitle'))
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         content = QWidget()
@@ -80,6 +81,8 @@ class SettingsPage(QWidget):
         sections.setContentsMargins(0, 0, 4, 0)
         sections.setSpacing(14)
         sections.addWidget(self._appearance_fields())
+        self.browser_card = BrowserExtensionCard(self.client)
+        sections.addWidget(self.browser_card)
         sections.addWidget(self._connection_fields())
         self.transport_hint = label('当前地址使用 HTTP。跨电脑连接建议使用 HTTPS，保护传输中的数据。',
                                     'transportHint', True)
@@ -379,4 +382,5 @@ class SettingsPage(QWidget):
         self.closed = True
         self.timer.stop()
         self.update_card.close()
+        self.browser_card.close()
         super().closeEvent(event)

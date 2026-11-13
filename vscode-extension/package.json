@@ -2,7 +2,7 @@
   "name": "wbot-studio",
   "displayName": "WBot 开发工具",
   "description": "为 wbot Python SDK 提供开发辅助、本地元素库管理，并发布自动化到 Assistant 或 OC。",
-  "version": "0.10.0",
+  "version": "0.11.0",
   "publisher": "marswei",
   "license": "MIT",
   "engines": {

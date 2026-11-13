@@ -1,6 +1,6 @@
 # WBot 开发工具
 
-**WBot 开发工具 0.10.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
+**WBot 开发工具 0.11.0** 用于编写和运行 `wbot` Python 自动化脚本：直接编辑 `.py` 文件，使用 VS Code 的代码调试工具，并从元素库插入网页操作代码。共享元素仓库支持个人分支、版本提交和向 OC 发起合并申请。
 
 支持新建脚本、选择 Python、安装 wbot、运行当前文件、调用 Python Debugger，以及网页元素抓取、管理、校验和代码插入。新增自动化项目初始化和本地发布包构建，可直接发布到 Assistant 或 OC，使用说明见[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md)。默认普通脚本演示文本替换与日志，无需启动浏览器。
 
@@ -36,7 +36,7 @@ OC 连接与 Assistant 绑定一致，不另建插件账号连接。Key 只提�
 
 ## 安装与首次使用
 
-1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.10.0.vsix`。正式 Marketplace 版本与本地测试版属于不同扩展身份，请避免同时启用。
+1. 在 VS Code 的扩展面板菜单中选择 **从 VSIX 安装**，选择 `wbot-studio-0.11.0.vsix`。正式 Marketplace 版本与本地测试版属于不同扩展身份，请避免同时启用。
 2. 打开本机项目文件夹，并将工作区设为受信任。需要 VS Code **1.90+** 和 Python **3.10+**。
 3. 打开左侧 **WBot**，执行 **选择 Python 解释器**，选择项目环境中的 `python.exe`。留空时依次使用 Microsoft Python 扩展当前解释器、项目 `.venv` 或 PATH 中的 `python`。
 4. 执行 **WBot: 将 wbot 安装到所选 Python 环境**，等待终端显示安装成功。VSIX 内置 wbot wheel，安装 `lxml` 依赖可能需要网络。
@@ -63,9 +63,9 @@ OC 连接与 Assistant 绑定一致，不另建插件账号连接。Key 只提�
 
 1. 执行 **WBot: 新建自动化项目（含虚拟环境）**，选择父目录、填写项目名称，并选择 Python 3.10+ 作为基础解释器。命令创建项目专属 `.venv`，安装扩展内置 WBot SDK 及 `lxml`，完成后可在新窗口打开。基础 Python 无需预装 WBot，也不会被安装业务依赖；获取 `lxml` 可能需要网络。
 2. 编辑 `main.py` 和 `wbot.json`，声明入口、版本、文件白名单、输入参数及精确依赖。项目名使用英文字母或数字开头，只包含英文字母、数字、`_`、`-`，最多 80 位。
-3. 执行 **WBot: 构建自动化发布包**。命令先保存编辑内容；多工作区时使用当前编辑文件所属项目，没有对应项目时让你选择。
+3. 从 0.11.0 起，执行 **WBot: 构建自动化发布包** 会使用项目 `.venv` 中的 Python，将业务代码、独立 Python 和现有依赖构建为 Windows x64 完整环境包。命令先保存编辑内容；多工作区时使用当前编辑文件所属项目，没有对应项目时让你选择。构建不安装依赖；缺少依赖时先在开发端准备。
 4. 构建结果保存在项目 `dist/<name>-<version>.wbot.zip`，可点击提示在文件管理器中显示。相同输出不会覆盖；更改发布内容后先提高版本。
-5. 执行 **WBot: 发布自动化到 Assistant / OC**，选择目标。可构建当前项目或选择已有发布包；重试时选择同一个包，内容有变化先提高版本。Assistant 收到后出现在“我的自动化”；OC 收到后进入自动化包仓库。发布不会自动运行或创建流程部署。
+5. 执行 **WBot: 发布自动化到 Assistant / OC**，选择目标。可构建当前项目或选择已有发布包；重试时选择同一个包，内容有变化先提高版本。Assistant 收到后校验并解压包内环境，出现在“我的自动化”；OC 收到后进入自动化包仓库。发布不会自动运行或创建流程部署。完整环境包需要 Assistant 0.11.0 及支持 schemaVersion=2 的 OC；也可将 ZIP 复制到目标电脑后离线导入。Assistant 不创建环境、不安装依赖。
 
 项目创建和构建均不需要连接 Assistant。`wbot.json` 是项目清单，与旧版 `.wbot.json` 流程文件不同。新建项目保留 `wbot.initProject` 命令 ID，旧快捷入口仍可使用。
 
@@ -89,7 +89,7 @@ my-automation/
 
 已有目录不会被覆盖。创建失败时不显示就绪提示，保留已创建内容并显示失败阶段，详细安装日志位于“输出 → WBot”。可按生成的 README 修复环境，或选择新的项目目录重建。新增依赖后应同步维护 `requirements.txt` 与清单中的精确依赖；初始锁定只反映创建时安装的版本。
 
-此功能完成开发端的独立环境搭建；当前 `.wbot.zip` 发布协议仍只打包清单文件，不携带 `.venv`，Assistant 0.10.0 仍使用宿主解释器。流程自带环境的部署与托管需要单独调整发布协议和 Assistant 执行逻辑，不能把本地 `.venv` 直接复制到其他电脑运行。
+Studio 0.11.0 会将项目环境转换为独立 Python 发布包，由 Assistant 0.11.0 校验、解压和托管。普通 `.venv` 仍只用于开发，不应直接复制到其他电脑；Assistant 不创建环境或安装依赖。
 
 元素资产需要显式导出为 `wbot-elements` JSON，列入清单的 `files` 并填写 `elements` 路径。发布脚本应使用 `selector.SelectorStore()` 读取 Assistant 提供的任务元素库；从旧代码插入模板得到的个人绝对路径需移除，避免继续访问开发机全局库。清单完整示例、命令行用法、依赖与运行限制见[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md)。
 
@@ -180,7 +180,7 @@ npm run package
 & $env:WBOT_TEST_PYTHON -X utf8 scripts/verify-package.py
 ```
 
-产物为仓库 `dist/wbot-studio-0.10.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目构建工具、wbot 及其 wheel；浏览器桥与抓取扩展由 Assistant 提供，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) 启动；VSIX 不作为 Assistant 桌面安装包。
+产物为仓库 `dist/wbot-studio-0.11.0.vsix`。`runtime/` 从当前项目准备；VSIX 包含项目构建工具、wbot 及其 wheel；浏览器桥与抓取扩展由 Assistant 提供，不包含桌面工作台页面、可视化流程编辑器或 Node 开发依赖。Assistant 界面仍按[Assistant 使用说明](https://github.com/DevilHill/wbot/blob/main/docs/assistant.md) 启动；VSIX 不作为 Assistant 桌面安装包。
 
 `npm test` 运行插件与 Assistant 元素服务通信回归。扩展宿主集成测试使用隔离的用户数据和扩展目录，入口为 `test/integration.js`；可从当前扩展目录执行：
 

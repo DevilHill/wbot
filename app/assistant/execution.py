@@ -20,7 +20,7 @@ from app.processes import windows_job
 from wbot.elements import ElementLibrary
 from wbot.runtime import MAX_RESULT_BYTES
 from .store import JobStore
-from .project_runtime import project_interpreter
+from .project_runtime import project_interpreter, bundled_interpreter
 
 MAX_LOG_BYTES = 4 * 1024 * 1024
 LOG_TRUNCATED = '\n[日志超过 4 MiB，后续输出已省略]\n'.encode('utf-8')
@@ -97,6 +97,10 @@ class ExecutionService:
                 manifest = extract_package(path, prepared)
                 package_id = f'{manifest["name"]}@{manifest["version"]}'
                 fingerprint = self._fingerprint(prepared, manifest)
+                destination = self.packages_dir / package_id
+                if manifest.get('runtime'):
+                    bundled_interpreter(prepared, manifest)
+                    project_path = str(destination)
                 try:
                     existing = self.store.package(package_id)
                 except KeyError:
@@ -109,7 +113,6 @@ class ExecutionService:
                             raise ValueError('该流程版本已绑定其他环境，请使用新的发布版本')
                         self.store.bind_project(package_id, project_path)
                     return {'id': package_id, 'manifest': existing['manifest']}
-                destination = self.packages_dir / package_id
                 if destination.exists():
                     raise ValueError('包目录已存在但记录不完整，请检查本地安装状态')
                 prepared.rename(destination)
@@ -121,15 +124,19 @@ class ExecutionService:
                 return {'id': package_id, 'manifest': manifest}
 
     @staticmethod
-    def _fingerprint(directory, manifest):
+    def _fingerprint(directory, manifest, include_runtime=True):
         digest = hashlib.sha256(json.dumps(manifest, sort_keys=True, ensure_ascii=False).encode('utf-8'))
         expected = {MANIFEST, CHECKSUMS, *manifest['files']}
+        if not include_runtime:
+            expected = {name for name in expected if not name.startswith('_runtime/')}
         actual = set()
         for path in directory.rglob('*'):
             if path.is_symlink() or getattr(path, 'is_junction', lambda: False)():
                 raise ValueError('已安装包不能包含文件系统链接')
             if path.is_file():
-                actual.add(path.relative_to(directory).as_posix())
+                relative = path.relative_to(directory).as_posix()
+                if include_runtime or not relative.startswith('_runtime/'):
+                    actual.add(relative)
         if actual != expected:
             raise ValueError('已安装包的文件清单发生变化，请重新安装可信版本')
         for relative in sorted(expected):
@@ -216,8 +223,10 @@ class ExecutionService:
         if self._fingerprint(installed, package['manifest']) != package['fingerprint']:
             raise ValueError('已安装包的内容发生变化，请重新安装可信版本')
         working = directory / 'work'
-        shutil.copytree(installed, working)
-        if self._fingerprint(working, package['manifest']) != package['fingerprint']:
+        portable = bool(package['manifest'].get('runtime'))
+        copy_fingerprint = self._fingerprint(installed, package['manifest'], include_runtime=False) if portable else package['fingerprint']
+        shutil.copytree(installed, working, ignore=(lambda directory, names: ['_runtime'] if Path(directory) == installed else []) if portable else None)
+        if self._fingerprint(working, package['manifest'], include_runtime=not portable) != copy_fingerprint:
             raise ValueError('准备期间包内容发生变化，请重新安装可信版本')
         library_path = directory / 'elements.sqlite3'
         library = ElementLibrary(library_path)
@@ -236,7 +245,7 @@ class ExecutionService:
             WBOT_ELEMENT_LIBRARY=str(library_path))
         for key in ('PYTHONPATH', 'PYTHONHOME', 'WBOT_BRIDGE_URL'):
             environment.pop(key, None)
-        environment['VIRTUAL_ENV'] = str(interpreter.parent.parent)
+        environment['VIRTUAL_ENV'] = str(interpreter.parent if interpreter.parent.name == '_runtime' else interpreter.parent.parent)
         environment['PATH'] = str(interpreter.parent) + os.pathsep + environment.get('PATH', '')
         environment['PYTHONDONTWRITEBYTECODE'] = '1'
         if getattr(self, "browser_url", None):
@@ -310,7 +319,9 @@ class ExecutionService:
             if not package['project_path']:
                 raise ValueError('该包尚未登记流程自带的虚拟环境，请在 Assistant 登记已部署的项目目录；不使用宿主 Python')
             directory, working, input_path, library_path = self._prepare_job(job, package)
-            interpreter = project_interpreter(package['project_path'], package['manifest']['requirements'])
+            manifest = package['manifest']
+            interpreter = (bundled_interpreter(self.packages_dir / package['id'], manifest) if manifest.get('runtime')
+                           else project_interpreter(package['project_path'], manifest['requirements']))
             with self._lock:
                 if self._stop_requested:
                     return

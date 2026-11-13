@@ -77,6 +77,8 @@ test('构建先保存所有文件，再打包当前项目并返回产物', async
   const directory = await temporaryDirectory(t);
   const project = path.join(directory, 'save-before-build');
   await runProjectCommand({python, runtime, project, action:'init', name:'save-before-build'});
+  execFileSync(python, ['-c', 'import sys; from tests.flow_environment import prepare_environment; prepare_environment(sys.argv[1])', project],
+    {cwd:runtime, windowsHide:true});
   let saved = false;
   const messages = [];
   const vscode = {
@@ -92,7 +94,7 @@ test('构建先保存所有文件，再打包当前项目并返回产物', async
   const commands = createProjectCommands({vscode, runtime,
     output:{appendLine:() => {}}, pythonExecutable:async () => {
       assert.equal(saved, true);
-      return python;
+      return projectPythonPath(project);
     }});
   const built = await commands.buildPackage();
   const content = execFileSync(python, ['-I', '-c',

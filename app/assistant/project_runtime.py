@@ -2,6 +2,7 @@
 import json
 import os
 from pathlib import Path
+import platform
 import subprocess
 
 
@@ -16,7 +17,7 @@ for name, expected in requirements.items():
         continue
     if actual != expected:
         errors.append(name + '==' + expected + ': installed ' + actual)
-print(json.dumps({'prefix': sys.prefix, 'base': sys.base_prefix, 'version': list(sys.version_info[:2]), 'errors': errors}))
+print(json.dumps({'prefix': sys.prefix, 'base': sys.base_prefix, 'version': list(sys.version_info[:3]), 'paths': sys.path, 'errors': errors}))
 '''
 
 
@@ -50,4 +51,29 @@ def project_interpreter(project, requirements):
         raise ValueError('流程解释器没有使用本项目的独立虚拟环境')
     if observed['errors']:
         raise ValueError('流程虚拟环境的依赖不满足要求（不会自动安装）：' + '; '.join(observed['errors']))
+    return executable
+
+
+def bundled_interpreter(project, manifest):
+    runtime = manifest['runtime']
+    if os.name != 'nt' or platform.machine().lower() not in ('amd64', 'x86_64'):
+        raise ValueError('此流程环境仅支持 Windows x64，请在匹配的平台部署')
+    environment = Path(project).resolve() / '_runtime'
+    executable = environment / 'python.exe'
+    try:
+        result = subprocess.run([str(executable), '-I', '-B', '-X', 'utf8', '-c', ENVIRONMENT_CHECK],
+            input=json.dumps(manifest['requirements']), capture_output=True, text=True, encoding='utf-8',
+            timeout=30, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+        if result.returncode:
+            raise ValueError('流程自带 Python 无法启动：' + result.stderr.strip())
+        observed = json.loads(result.stdout)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        raise ValueError(f'流程自带 Python 无法启动：{error}') from error
+    if (Path(observed['prefix']).resolve() != environment
+            or Path(observed['base']).resolve() != environment
+            or '.'.join(map(str, observed['version'])) != runtime['python']
+            or any(not Path(path).resolve().is_relative_to(environment) for path in observed['paths'])):
+        raise ValueError('流程 Python 版本或隔离路径不符，不能依赖开发机环境')
+    if observed['errors']:
+        raise ValueError('流程发布包缺少依赖：' + '; '.join(observed['errors']))
     return executable

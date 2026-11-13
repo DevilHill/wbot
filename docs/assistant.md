@@ -2,12 +2,12 @@
 
 Assistant 使用 **PySide6 + Qt Widgets** 提供本机小窗口，包含自动化搜索、发布包导入、参数填写、运行记录、日志和 JSON 结果。Qt 界面与后台执行服务是独立进程：关闭窗口收起到系统托盘，已接受的任务继续运行；重新打开可查看原作业。系统没有可用托盘时，关闭窗口退出界面，后台服务仍继续运行。
 
-当前源码正在开发流程独立环境托管，尚未作为 Assistant 正式版本发布；已发布的 Assistant 0.10.0 仍采用旧的共享解释器。Studio 负责创建项目及 `.venv`，开发者或部署工具负责在目标机器准备环境，Assistant 只负责校验、进程托管、参数、日志和结果。[OC 管理端](oc.md) 可审批设备、管理发布包并派发任务；执行机器需要事先登记对应版本的流程目录。
+从 Assistant 0.11.0 起，支持流程独立环境托管与跨电脑交付，停止使用旧版共享解释器。Studio 在开发端创建项目及 `.venv`，并将 Python 和已安装依赖打入流程发布包。Assistant 负责校验、解压、进程托管、参数、日志和结果，不创建虚拟环境、不运行 pip，也不回退到宿主 Python。[OC 管理端](oc.md) 可审批设备、管理发布包并派发任务。
 
-## 流程独立环境托管（开发版）
+## 流程独立环境托管（0.11.0 起）
 
 1. 在 VS Code 执行“新建自动化项目（含虚拟环境）”，或在目标机器的流程目录中准备 `.venv` 与全部依赖。环境需要 Python 3.10+，禁止 `--system-site-packages`；非 Windows 平台使用 `venv --copies`。
-2. 打开开发版 Assistant，在“我的自动化”点击“托管流程”，选择包含 `wbot.json` 和 `.venv` 的目录。登记时校验解释器和清单依赖，并保存声明代码的不可变副本。
+2. 打开 Assistant 0.11.0 或更新版本，在“我的自动化”点击“托管流程”，选择包含 `wbot.json` 和 `.venv` 的目录。登记时校验解释器和清单依赖，并保存声明代码的不可变副本。
 3. 选择流程、填写参数后运行。Assistant 使用该目录 `.venv/Scripts/python.exe`（非 Windows 为 `.venv/bin/python`）；不会向子进程注入宿主 SDK 路径。使用 WBot API 的流程需要自行安装 SDK；纯标准库脚本不需要安装 WBot。
 4. 同一版本可重复登记相同目录；更换代码、依赖或部署目录应发布新版本，并为新版本准备独立目录和环境。不同流程版本不能共享同一个已登记目录。
 
@@ -15,7 +15,29 @@ Assistant 使用 **PySide6 + Qt Widgets** 提供本机小窗口，包含自动�
 
 旧 `.wbot.zip` 仍可导入和查看，但未登记运行环境时不允许执行，也不会回退到宿主 Python。已导入包可以通过登记内容完全一致的项目目录补上环境。OC 下发同名同版本、内容相同的包不会覆盖本机环境绑定；没有预先部署的环境时明确报告失败。
 
-本阶段只实现本机部署目录托管；尚未实现跨电脑环境的打包、传输与重建。普通 `.venv` 不具备通用可搬运性，不能通过复制目录解决跨电脑部署。基础 Python 和流程目录都应位于 Assistant 安装目录之外，避免程序升级影响流程。
+本机托管时，基础 Python 和流程目录应位于 Assistant 安装目录之外，避免程序升级影响流程。跨电脑请使用下面的完整环境发布包，不能直接复制普通 `.venv`。
+
+## 跨电脑打包、传输和部署（0.11.0 起）
+
+1. 在 Windows x64 开发电脑中准备项目 `.venv`，安装并验证业务依赖，选择项目自己的 Python。执行 VS Code 的 **WBot: 构建自动化发布包**。命令行等价入口为：
+
+   ```powershell
+   .\my-flow\.venv\Scripts\python.exe D:\wbot\app\automation_package.py build .\my-flow --with-runtime
+   ```
+
+2. 构建工具生成 `schemaVersion=2` 的 `.wbot.zip`，包含声明的业务代码、完整 Python 标准库、Python DLL、项目 site-packages 和逐文件 SHA256。`runtime` 记录平台、Python 精确版本及 `_runtime/python.exe`；依赖版本取自项目实际环境。源 `wbot.json` 和 `.venv` 保持不变。
+3. 离线传输时，将 ZIP 复制到目标电脑，在新版 Assistant 点击“导入”。联网交付时，从插件发布到兼容新版协议的 OC，再由 OC 部署和派发；Assistant 下载后验证并解压，不需要预先登记目录，也不需要联网安装 Python 或依赖。
+4. 每个流程版本独占 Assistant 数据目录中的 `packages/<name>@<version>/_runtime`。每次启动校验整个包，业务代码复制到独立作业目录；运行环境不重复复制。Assistant 升级不替换这些环境。同名同版本内容不同会被拒绝，应增加流程版本重新发布。
+
+当前交付目标是 **Windows x64、相同兼容操作系统**。构建工具拒绝共享系统依赖、editable 安装、外部 `.pth` 路径及无法迁移的 `.pth` 启动代码。系统驱动、Office、浏览器程序、Playwright 浏览器缓存及依赖的外部服务不属于 Python site-packages，不会自动随包迁移；需要在目标电脑另外准备。包中不提供可迁移的 pip console-script 启动器，流程应使用 Python API 或 `sys.executable -m 模块`。
+
+新版包最多 20000 个文件，单文件 128 MiB，解压总量 512 MiB，归档上限 516 MiB，清单和校验索引各 4 MiB。传输、解压、校验均采用流式读写。OC 的 Python 协议、Go 上传入口和反向代理配置需要一起升级；旧版 OC/Assistant 不支持此格式。旧 schemaVersion=1 包继续使用上面的本机环境登记方式。
+
+## 浏览器扩展安装入口
+
+Assistant 的 **设置 → 浏览器扩展** 可以选择 Chrome 或 Edge，然后点击“安装浏览器扩展”。Assistant 准备固定扩展目录、复制路径并请求所选浏览器打开扩展管理页。用户需开启“开发者模式”，点击“加载已解压的扩展程序”并选择该目录，再刷新要抓取的网页。
+
+“检测扩展连接”显示所有浏览器的连接总数，不据此判断某个个人资料已经安装。多个个人资料需要分别加载；更新后在扩展管理页重新加载。此功能不要求连接 OC，且不会写企业浏览器策略或改动用户的个人资料。手动加载流程遵循 [Chrome 官方说明](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) 和 [Edge 官方说明](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading)。
 
 ## 连接新版 OC（Assistant 0.8.0 起）
 
@@ -274,7 +296,7 @@ python -m app.automation_package inspect automations/my-automation/dist/my-autom
 
 | 字段 | 当前规则 |
 | --- | --- |
-| `schemaVersion` | 必须是整数 `1` |
+| `schemaVersion` | 开发清单为整数 `1`；完整环境构建产物为 `2` |
 | `name` | 1–80 位，英文字母或数字开头，只使用英文字母、数字、`_`、`-` |
 | `version` | 固定语义版本，如 `0.1.0`、`1.0.0`；不接受 `latest` |
 | `entry` | `files` 中声明的 `.py` 文件，使用项目内相对路径 |
@@ -282,12 +304,13 @@ python -m app.automation_package inspect automations/my-automation/dist/my-autom
 | `parameters` | 参数名到声明的对象；无参数时为 `{}` |
 | `requirements` | 依赖包名到精确版本的对象，如 `{"openpyxl": "3.1.5"}`；无额外依赖时为 `{}` |
 | `elements` | 可选，`wbot-elements` JSON 的相对路径，且必须同时列入 `files` |
+| `runtime` | 仅用于 schemaVersion=2，由构建工具生成，记录平台、Python 版本和包内解释器 |
 
 清单不接受上述范围外的字段。相对路径统一使用 `/`，拒绝绝对路径、`..`、链接、保留设备名和大小写冲突。包内只包含清单、白名单文件及 `checksums.sha256.json` 完整性索引。
 
 默认输出为 `<项目>/dist/<name>-<version>.wbot.zip`。`build --output PATH` 可指定完整输出文件路径，但已有文件仍不会覆盖。Assistant 允许重复导入内容完全相同的同名版本；同名同版本内容不同则拒绝。更新业务代码时提高版本并重新构建，不要直接改动已安装目录。
 
-包上限为 1000 个文件、单文件 16 MiB、总解压大小 64 MiB、清单/校验元数据各 256 KiB。导入先验证文件集合和完整性再安装；哈希不验证发布者身份，应导入自己信任的来源提供的包。
+schemaVersion=1 的包上限为 1000 个文件、单文件 16 MiB、总解压大小 64 MiB、清单/校验元数据各 256 KiB。完整环境包的上限见“跨电脑打包、传输和部署”。导入先验证文件集合和完整性再安装；哈希不验证发布者身份，应导入自己信任的来源提供的包。
 
 ## 参数与运行结果
 

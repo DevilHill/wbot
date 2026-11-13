@@ -6,11 +6,23 @@ import socket
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 from app.assistant.server import create_server
 from tests.test_assistant_server import RecordingExecution
 
 
 class AssistantBrowserTests(unittest.TestCase):
+    def test_browser_install_uses_selected_browser_and_stable_prepared_directory(self):
+        with patch('app.extension_installer.open_extension_manager', return_value=True) as opened:
+            status, result = self.request(body={'path': '/api/extension/install', 'body': {'browser': 'edge'}})
+        self.assertEqual(status, 200, result)
+        opened.assert_called_once_with('edge')
+        self.assertEqual(result['management_url'], 'edge://extensions/')
+        self.assertTrue((Path(result['directory']) / 'manifest.json').is_file())
+        self.assertEqual(Path(result['directory']).parent, Path(self.temporary.name))
+        self.assertNotIn('installationVerified', result)
+        self.assertEqual(self.request(body={'path': '/api/extension/install', 'body': {'browser': '../chrome'}})[0], 400)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

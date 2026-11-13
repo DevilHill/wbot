@@ -108,7 +108,7 @@ def copy_runtime(bundle):
     app = source_root / 'app'
     assistant = app / 'assistant'
     assistant.mkdir(parents=True)
-    for name in ('__init__.py', 'automation_package.py', 'project_template.py', 'assistant_release.py', 'processes.py',
+    for name in ('__init__.py', 'automation_package.py', 'portable_package.py', 'project_template.py', 'assistant_release.py', 'processes.py',
                  'server.py', 'ws_bridge.py', 'ai_client.py', 'xpath_engine.py', 'extension_installer.py'):
         shutil.copy2(ROOT / 'app' / name, app / name)
     copy_tree(ROOT / 'extension', source_root / 'extension')

@@ -11,6 +11,8 @@ class JobStore:
         with self._connection() as database:
             database.execute('''CREATE TABLE IF NOT EXISTS packages (
                 id TEXT PRIMARY KEY, manifest TEXT NOT NULL, fingerprint TEXT NOT NULL)''')
+            database.execute('''CREATE TABLE IF NOT EXISTS project_bindings (
+                package_id TEXT PRIMARY KEY, project_path TEXT NOT NULL UNIQUE)''')
             database.execute('''CREATE TABLE IF NOT EXISTS jobs (
                 id TEXT PRIMARY KEY, package_id TEXT NOT NULL, request_id TEXT UNIQUE,
                 payload_hash TEXT NOT NULL, parameters TEXT NOT NULL, state TEXT NOT NULL,
@@ -34,22 +36,32 @@ class JobStore:
                 error='执行服务中断；未确认的作业不会自动重跑'
                 WHERE state IN ('preparing', 'running', 'stopping')""", (time.time(),))
 
-    def save_package(self, package_id, manifest, fingerprint):
+    def save_package(self, package_id, manifest, fingerprint, project_path=''):
         with self._connection() as database:
             database.execute('INSERT INTO packages VALUES (?, ?, ?)',
                 (package_id, json.dumps(manifest, ensure_ascii=False), fingerprint))
+            if project_path:
+                database.execute('INSERT INTO project_bindings VALUES (?, ?)', (package_id, project_path))
+
+    def bind_project(self, package_id, project_path):
+        with self._connection() as database:
+            database.execute('''INSERT INTO project_bindings VALUES (?, ?)
+                ON CONFLICT(package_id) DO UPDATE SET project_path=excluded.project_path''', (package_id, project_path))
 
     def package(self, package_id):
         with self._connection() as database:
-            row = database.execute('SELECT * FROM packages WHERE id=?', (package_id,)).fetchone()
+            row = database.execute('''SELECT p.*, COALESCE(b.project_path, '') AS project_path
+                FROM packages p LEFT JOIN project_bindings b ON b.package_id=p.id WHERE p.id=?''', (package_id,)).fetchone()
         if row is None:
             raise KeyError(f'自动化包不存在：{package_id}')
-        return {'id': row['id'], 'manifest': json.loads(row['manifest']), 'fingerprint': row['fingerprint']}
+        return {'id': row['id'], 'manifest': json.loads(row['manifest']), 'fingerprint': row['fingerprint'],
+                'project_path': row['project_path']}
 
     def list_packages(self):
         with self._connection() as database:
-            rows = database.execute('SELECT id, manifest FROM packages ORDER BY id').fetchall()
-        return [{'id': row['id'], 'manifest': json.loads(row['manifest'])} for row in rows]
+            rows = database.execute('''SELECT p.id, p.manifest, COALESCE(b.project_path, '') AS project_path
+                FROM packages p LEFT JOIN project_bindings b ON b.package_id=p.id ORDER BY p.id''').fetchall()
+        return [{'id': row['id'], 'manifest': json.loads(row['manifest']), 'project_path': row['project_path']} for row in rows]
 
     @staticmethod
     def _job(row):

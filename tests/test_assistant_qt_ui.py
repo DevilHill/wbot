@@ -15,7 +15,7 @@ if HAS_QT:
     from app.assistant.qt_settings import SettingsPage
 
 
-PACKAGE = {'id': 'demo@1.0.0', 'manifest': {'schemaVersion': 1, 'name': 'demo', 'version': '1.0.0',
+PACKAGE = {'id': 'demo@1.0.0', 'project_path': 'C:/flows/demo', 'manifest': {'schemaVersion': 1, 'name': 'demo', 'version': '1.0.0',
     'entry': 'main.py', 'files': ['main.py'], 'requirements': {}, 'parameters': {
     'name': {'type': 'string', 'default': 'WBot', 'description': '问候对象'},
     'count': {'type': 'integer', 'required': True},
@@ -50,6 +50,7 @@ class FakeClient:
             QTimer.singleShot(0, lambda: on_error('后台服务未连接'))
             return None
         responses = {'/api/packages': {'items': self.packages},
+                     '/api/projects': {'package': PACKAGE},
                      '/api/updates': {'update': {'status': 'idle', 'version': '0.7.0', 'install_supported': False}},
                      '/api/settings': {'settings': {'server_url': '', 'device_name': '',
                                                    'binding_state': 'unconfigured'}},
@@ -157,6 +158,23 @@ class AssistantQtUiTests(unittest.TestCase):
         QTest.qWait(20)
         self.assertEqual(window.search.text(), '')
         self.assertEqual(window.package_list.currentItem().data(256), imported['id'])
+
+    def test_unregistered_archive_cannot_run_and_hosting_uses_project_endpoint(self):
+        self.client.packages = [dict(PACKAGE, project_path='')]
+        window = AssistantWindow(self.client, 'test-state')
+        self.widgets.append(window)
+        window.show()
+        QTest.qWait(20)
+        window.package_list.setCurrentRow(0)
+        self.assertFalse(window.run_button.isEnabled())
+        self.assertIn('托管', window.run_button.text())
+        self.assertTrue(window.host_button.isEnabled())
+        self.client.packages = [PACKAGE]
+        window.host_project('C:/flows/demo')
+        self.assertFalse(window.host_button.isEnabled())
+        QTest.qWait(30)
+        self.assertIn(('POST', '/api/projects', {'path': 'C:/flows/demo'}), self.client.calls)
+        self.assertTrue(window.run_button.isEnabled())
 
     def test_history_polls_summary_and_displays_bounded_history_count(self):
         summary = {key: JOB[key] for key in ('id', 'package_id', 'state', 'created_at')}

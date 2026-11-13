@@ -1,6 +1,6 @@
 """独立于 Assistant 界面的本地自动化包执行服务。
 
-服务同时只执行一个作业。各作业使用独立目录，但 Python 依赖仍来自指定解释器，
+服务同时只执行一个作业。各作业使用独立目录及流程自行准备的虚拟环境，
 不提供代码沙箱。宿主必须先取得状态目录的独占锁，再创建执行服务。
 """
 import hashlib
@@ -10,33 +10,20 @@ from pathlib import Path
 import shutil
 import signal
 import subprocess
-import sys
 import tempfile
 import threading
 import time
 from uuid import uuid4
 
-from app.automation_package import CHECKSUMS, MANIFEST, extract_package, resolve_parameters
+from app.automation_package import CHECKSUMS, MANIFEST, build_package, extract_package, inspect_package, resolve_parameters
 from app.processes import windows_job
 from wbot.elements import ElementLibrary
 from wbot.runtime import MAX_RESULT_BYTES
 from .store import JobStore
+from .project_runtime import project_interpreter
 
 MAX_LOG_BYTES = 4 * 1024 * 1024
 LOG_TRUNCATED = '\n[日志超过 4 MiB，后续输出已省略]\n'.encode('utf-8')
-DEPENDENCY_CHECK = '''import importlib.metadata as metadata, json, sys
-requirements = json.load(sys.stdin)
-errors = []
-for name, expected in requirements.items():
-    try:
-        actual = metadata.version(name)
-    except metadata.PackageNotFoundError:
-        errors.append(name + '==' + expected + ': not installed')
-        continue
-    if actual != expected:
-        errors.append(name + '==' + expected + ': installed ' + actual)
-print(json.dumps(errors))
-'''
 
 
 def _reject_nonfinite(value):
@@ -44,13 +31,12 @@ def _reject_nonfinite(value):
 
 
 class ExecutionService:
-    def __init__(self, state_dir, python_executable=sys.executable):
+    def __init__(self, state_dir):
         self.state_dir = Path(state_dir).resolve()
         self.packages_dir = self.state_dir / 'packages'
         self.jobs_dir = self.state_dir / 'jobs'
         self.packages_dir.mkdir(parents=True, exist_ok=True)
         self.jobs_dir.mkdir(parents=True, exist_ok=True)
-        self.python_executable = str(python_executable)
         self.store = JobStore(self.state_dir / 'assistant.sqlite3')
         self.store.recover_interrupted()
         self._lock = threading.RLock()
@@ -80,7 +66,30 @@ class ExecutionService:
             self.authorize_update(token)
             self.updating = False
 
+    def host_project(self, path):
+        project = Path(path).absolute()
+        if not project.is_dir():
+            raise ValueError('请选择包含 wbot.json 和 .venv 的流程目录')
+        with self._lock:
+            self._require_open()
+            if self._active_id is not None:
+                raise ValueError('当前有任务执行，请结束后再登记流程环境')
+            with tempfile.TemporaryDirectory(prefix='.host-', dir=self.packages_dir) as temporary:
+                archive = build_package(project, Path(temporary) / 'flow.wbot.zip')
+                manifest = inspect_package(archive)
+                project_interpreter(project, manifest['requirements'])
+                project = project.resolve()
+                package_id = f'{manifest["name"]}@{manifest["version"]}'
+                for package in self.store.list_packages():
+                    if (package['project_path'] and Path(package['project_path']) == project
+                            and package['id'] != package_id):
+                        raise ValueError('该环境已属于其他流程版本，请为新版本准备独立部署目录和环境')
+                return self._install_archive(archive, str(project))
+
     def install_package(self, path):
+        return self._install_archive(path)
+
+    def _install_archive(self, path, project_path=''):
         with self._lock:
             self._require_open()
             with tempfile.TemporaryDirectory(prefix='.install-', dir=self.packages_dir) as temporary:
@@ -95,13 +104,17 @@ class ExecutionService:
                 if existing:
                     if existing['fingerprint'] != fingerprint:
                         raise ValueError('相同名称和版本的包内容不同，请发布新版本')
+                    if project_path:
+                        if existing['project_path'] and existing['project_path'] != project_path:
+                            raise ValueError('该流程版本已绑定其他环境，请使用新的发布版本')
+                        self.store.bind_project(package_id, project_path)
                     return {'id': package_id, 'manifest': existing['manifest']}
                 destination = self.packages_dir / package_id
                 if destination.exists():
                     raise ValueError('包目录已存在但记录不完整，请检查本地安装状态')
                 prepared.rename(destination)
                 try:
-                    self.store.save_package(package_id, manifest, fingerprint)
+                    self.store.save_package(package_id, manifest, fingerprint, project_path)
                 except Exception:
                     shutil.rmtree(destination)
                     raise
@@ -217,26 +230,19 @@ class ExecutionService:
         input_path.write_text(json.dumps(context, ensure_ascii=False, allow_nan=False), encoding='utf-8')
         return directory, working, input_path, library_path
 
-    def _check_requirements(self, requirements):
-        if not requirements:
-            return
-        result = subprocess.run([self.python_executable, '-I', '-c', DEPENDENCY_CHECK],
-            input=json.dumps(requirements), capture_output=True, text=True, encoding='utf-8',
-            timeout=15, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
-        if result.returncode:
-            raise ValueError(f'依赖检查失败：{result.stderr.strip()}')
-        errors = json.loads(result.stdout)
-        if errors:
-            raise ValueError('所选 Python 的依赖不满足要求（不会自动安装）：' + '; '.join(errors))
-
-    def _start_process(self, job, directory, working, input_path, library_path):
+    def _start_process(self, job, directory, working, input_path, library_path, interpreter):
         environment = dict(os.environ, PYTHONUTF8='1', PYTHONUNBUFFERED='1',
             WBOT_RUN_INPUT=str(input_path), WBOT_RUN_RESULT=str(directory / 'result.json'),
             WBOT_ELEMENT_LIBRARY=str(library_path))
+        for key in ('PYTHONPATH', 'PYTHONHOME', 'WBOT_BRIDGE_URL'):
+            environment.pop(key, None)
+        environment['VIRTUAL_ENV'] = str(interpreter.parent.parent)
+        environment['PATH'] = str(interpreter.parent) + os.pathsep + environment.get('PATH', '')
+        environment['PYTHONDONTWRITEBYTECODE'] = '1'
         if getattr(self, "browser_url", None):
             environment["WBOT_BRIDGE_URL"] = self.browser_url
         worker = Path(__file__).with_name('worker.py')
-        process = subprocess.Popen([self.python_executable, '-I', '-X', 'utf8', '-u', str(worker), str(input_path)],
+        process = subprocess.Popen([str(interpreter), '-I', '-B', '-X', 'utf8', '-u', str(worker), str(input_path)],
             cwd=working, env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0), start_new_session=os.name != 'nt')
         self._process = process
@@ -301,12 +307,14 @@ class ExecutionService:
         outcome = {'truncated': False, 'error': ''}
         reader = None
         try:
+            if not package['project_path']:
+                raise ValueError('该包尚未登记流程自带的虚拟环境，请在 Assistant 登记已部署的项目目录；不使用宿主 Python')
             directory, working, input_path, library_path = self._prepare_job(job, package)
-            self._check_requirements(package['manifest'].get('requirements', {}))
+            interpreter = project_interpreter(package['project_path'], package['manifest']['requirements'])
             with self._lock:
                 if self._stop_requested:
                     return
-                process = self._start_process(job, directory, working, input_path, library_path)
+                process = self._start_process(job, directory, working, input_path, library_path, interpreter)
             reader = threading.Thread(target=self._capture_log,
                 args=(process, directory / 'output.log', outcome), daemon=True)
             reader.start()

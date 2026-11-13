@@ -10,7 +10,7 @@ import time
 import unittest
 from urllib.request import ProxyHandler, Request, build_opener
 
-from app.automation_package import build_package, create_project
+from app.automation_package import create_project
 from app.assistant.lifecycle import ServiceLock, service_status
 
 
@@ -93,7 +93,6 @@ class AssistantLifecycleTests(unittest.TestCase):
                 'import time\nfrom wbot import runtime\n'
                 'time.sleep(0.3)\nprint("background complete")\n'
                 'runtime.set_result({"continued": True})\n', encoding="utf-8")
-            archive = build_package(project)
 
             def command(action):
                 completed = subprocess.run(
@@ -118,7 +117,9 @@ class AssistantLifecycleTests(unittest.TestCase):
             try:
                 self.assertTrue(command("status")["running"])
                 self.assertEqual(command("start")["url"], opened["url"])
-                package = api("/api/packages", {"path": str(archive)})["package"]
+                from tests.flow_environment import prepare_environment
+                prepare_environment(project)
+                package = api("/api/projects", {"path": str(project)})["package"]
                 job = api("/api/jobs", {"package_id": package["id"], "parameters": {}})["job"]
                 deadline = time.monotonic() + 10
                 while time.monotonic() < deadline:

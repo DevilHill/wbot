@@ -12,6 +12,7 @@ from app.assistant.execution import ExecutionService
 from app.assistant.remote_client import GatewayClient, GatewayError
 from app.oc.agent_server import create_agent_server
 from app.oc.service import OcService
+from tests.flow_environment import prepare_environment
 
 
 class AssistantOcIntegrationTests(unittest.TestCase):
@@ -47,6 +48,8 @@ class AssistantOcIntegrationTests(unittest.TestCase):
         create_project(project, 'remote-example')
         if script is not None:
             (project / 'main.py').write_text(script, encoding='utf-8')
+            prepare_environment(project)
+            self.execution.host_project(project)
         package = self.oc.import_package(build_package(project))
         process = self.oc.create_process({'name': '远程示例', 'package_id': package['id'],
                                           'device_id': self.device_id, 'defaults': {}, 'enabled': True})

@@ -6,7 +6,7 @@ import tempfile
 import threading
 import unittest
 
-from app.oc.server import create_server
+from app.oc.server import create_server, MAX_UPLOAD_BYTES
 
 
 class PreviewService:
@@ -107,7 +107,7 @@ class OcServerTests(unittest.TestCase):
         self.assertEqual(actual, archive)
         self.assertFalse(path.exists())
         status, _, _ = self.request('/api/oc/packages', 'POST', b'',
-                                    {'Content-Type': 'application/octet-stream', 'Content-Length': str(69 * 1024 * 1024)})
+                                    {'Content-Type': 'application/octet-stream', 'Content-Length': str(MAX_UPLOAD_BYTES + 1)})
         self.assertEqual(status, 400)
 
     def test_json_errors_and_unknown_job_return_clear_errors(self):

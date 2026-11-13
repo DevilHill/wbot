@@ -19,14 +19,14 @@ class AssistantBrowserTests(unittest.TestCase):
         opened.assert_called_once_with('edge')
         self.assertEqual(result['management_url'], 'edge://extensions/')
         self.assertTrue((Path(result['directory']) / 'manifest.json').is_file())
-        self.assertEqual(Path(result['directory']).parent, Path(self.temporary.name))
+        self.assertEqual(Path(result['directory']).parent.resolve(), Path(self.temporary.name).resolve())
         self.assertNotIn('installationVerified', result)
         self.assertEqual(self.request(body={'path': '/api/extension/install', 'body': {'browser': '../chrome'}})[0], 400)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
-        self.library = Path(self.temporary.name) / 'elements.sqlite3'
+        self.library = Path(self.temporary.name).resolve() / 'elements.sqlite3'
         self.server = create_server(RecordingExecution(self.temporary.name), browser_port=0, library_path=self.library)
         self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
         self.thread.start()

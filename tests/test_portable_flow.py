@@ -24,7 +24,7 @@ class PortableFlowTests(unittest.TestCase):
     def setUpClass(cls):
         cls.temporary = tempfile.TemporaryDirectory(prefix='wbot-portable-')
         cls.addClassCleanup(cls.temporary.cleanup)
-        cls.root = Path(cls.temporary.name)
+        cls.root = Path(cls.temporary.name).resolve()
         project = cls.root / '开发项目'
         create_project(project, 'portable-demo')
         prepare_environment(project)

@@ -44,7 +44,8 @@ def main():
                      'extension/runtime/extension/', 'extension/src/bridge.js', 'extension/runtime/app/web/',
                      'extension/runtime/app/assistant/web/')
         assert not any(name.startswith(forbidden) or name.endswith('.wbot.json') for name in names)
-        assert {'extension/runtime/app/automation_package.py', 'extension/runtime/app/processes.py'} <= names
+        assert {'extension/runtime/app/automation_package.py', 'extension/runtime/app/project_template.py',
+                'extension/runtime/app/processes.py', 'extension/src/project-environment.js'} <= names
         assert {'extension/src/assistant-client.js', 'extension/src/shared-elements.js',
                 'extension/src/shared-element-documents.js'} <= names
         for name in names:

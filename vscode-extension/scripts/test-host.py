@@ -12,6 +12,7 @@ import tempfile
 parser = argparse.ArgumentParser()
 parser.add_argument('--code', required=True, help='VS Code 可执行文件的绝对路径')
 parser.add_argument('--python', default=sys.executable, help='已安装 wbot 与 lxml 的解释器')
+parser.add_argument('--project-setup', action='store_true', help='创建独立环境并在新窗口验证项目配置与运行')
 parser.add_argument('--debugger-extension', help='已安装的 ms-python.debugpy 扩展目录；只复制到隔离测试目录，不联网安装')
 args = parser.parse_args()
 extension = Path(__file__).resolve().parents[1]
@@ -19,7 +20,8 @@ test_root = extension.parent / 'build' / 'vscode-tests'
 test_root.mkdir(parents=True, exist_ok=True)
 run_dir = Path(tempfile.mkdtemp(prefix='run-', dir=test_root))
 workspace = run_dir / 'workspace'
-workspace.mkdir()
+if not args.project_setup:
+    workspace.mkdir()
 
 extensions_dir = run_dir / 'extensions'
 extensions_dir.mkdir()
@@ -62,13 +64,22 @@ env['WBOT_TEST_SETTINGS_FILE'] = str(run_dir / 'user-data' / 'User' / 'settings.
 env['WBOT_TEST_DEBUGGER'] = '1' if args.debugger_extension else '0'
 env.pop('ELECTRON_RUN_AS_NODE', None)
 env.pop('VSCODE_IPC_HOOK_CLI', None)
+if args.project_setup:
+    bootstrap = ('const {initializeProject}=require(process.argv[1]);'
+                 'initializeProject(JSON.parse(process.argv[2]))'
+                 '.catch(error=>{console.error(error);process.exitCode=1;});')
+    subprocess.run(['node', '-e', bootstrap, str(extension / 'src/project-environment.js'),
+                    json.dumps({'python': env['WBOT_TEST_PYTHON'], 'runtime': str(extension / 'runtime'),
+                                'project': str(workspace), 'name': 'host-project'})],
+                   env=env, check=True, timeout=120, creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
+test_entry = 'project-host.js' if args.project_setup else 'integration.js'
 command = [args.code, '--disable-gpu', '--disable-updates',
            '--disable-workspace-trust', '--skip-welcome', '--skip-release-notes',
            '--no-proxy-server',
            f'--user-data-dir={run_dir / "user-data"}',
            f'--extensions-dir={extensions_dir}',
            f'--extensionDevelopmentPath={extension}',
-           f'--extensionTestsPath={extension / "test/integration.js"}', str(workspace)]
+           f'--extensionTestsPath={extension / "test" / test_entry}', str(workspace)]
 if not args.debugger_extension:
     command.insert(1, '--disable-extensions')
 print(f'测试目录：{run_dir}', flush=True)

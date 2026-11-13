@@ -7,6 +7,13 @@ const os = require('node:os');
 const {spawnSync} = require('node:child_process');
 const core = require('../src/core');
 
+test('项目 Python 路径跟随所属工作区，普通绝对路径保持不变', () => {
+  assert.equal(core.configuredPythonPath('${workspaceFolder}/.venv/Scripts/python.exe', 'D:/flow a'),
+    'D:/flow a/.venv/Scripts/python.exe');
+  assert.equal(core.configuredPythonPath('C:/Python/python.exe'), 'C:/Python/python.exe');
+  assert.throws(() => core.configuredPythonPath('${workspaceFolder}/.venv/bin/python'), /工作区/);
+});
+
 test('服务地址限制与元素库路径', () => {
   assert.equal(core.bridgeUrl('http://127.0.0.1:8790/'), 'http://127.0.0.1:8790');
   for (const url of ['https://127.0.0.1:8790', 'http://example.com', 'http://localhost', 'http://127.0.0.1/path', 'http://user@127.0.0.1', 'http://127.0.0.1/?a=b']) assert.throws(() => core.bridgeUrl(url));

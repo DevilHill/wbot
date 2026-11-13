@@ -3,6 +3,7 @@ const fs = require('node:fs/promises');
 const path = require('node:path');
 const {execFile} = require('node:child_process');
 const {promisify} = require('node:util');
+const {initializeProject} = require('./project-environment');
 
 const executeFile = promisify(execFile);
 
@@ -76,14 +77,28 @@ function createProjectCommands({vscode, runtime, output, pythonExecutable}) {
     });
     if (name === undefined) return;
     const directory = path.join(parent.fsPath, name);
-    const manifest = await execute('init', directory, parent, name);
-    const manifestUri = vscode.Uri.file(path.join(directory, 'wbot.json'));
-    await vscode.window.showTextDocument(await vscode.workspace.openTextDocument(manifestUri));
-    const choice = await vscode.window.showInformationMessage(`已创建自动化项目：${directory}`, '添加到工作区');
-    if (choice === '添加到工作区') {
-      vscode.workspace.updateWorkspaceFolders(vscode.workspace.workspaceFolders?.length || 0, 0,
-        {uri:vscode.Uri.file(directory), name:manifest.name});
+    const currentPython = await pythonExecutable(parent);
+    const selected = await vscode.window.showQuickPick([
+      {label:'使用当前 Python 创建独立环境', description:currentPython, python:currentPython},
+      {label:'选择其他 Python 解释器'}
+    ], {title:'选择项目的基础 Python（3.10+）', placeHolder:'只用于创建本项目的 .venv，不向基础 Python 安装依赖'});
+    if (!selected) return;
+    let python = selected.python;
+    if (!python) {
+      const interpreters = await vscode.window.showOpenDialog({title:'选择 Python 解释器',
+        canSelectFiles:true, canSelectFolders:false, canSelectMany:false});
+      if (!interpreters?.[0]) return;
+      if (interpreters[0].scheme !== 'file') throw new Error('仅支持本机 Python 解释器');
+      python = interpreters[0].fsPath;
     }
+    output.appendLine(`新建自动化项目 · ${directory} · ${python}`);
+    const manifest = await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,
+      title:'WBot：新建项目并搭建虚拟环境'}, progress => initializeProject({
+      python, runtime, project:directory, name, log:line => output.appendLine(line),
+      report:message => { progress.report({message}); output.appendLine(message); }
+    }));
+    const choice = await vscode.window.showInformationMessage(`项目与独立虚拟环境已就绪：${directory}`, '在新窗口打开');
+    if (choice === '在新窗口打开') await vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.file(directory), true);
     return manifest;
   }
 

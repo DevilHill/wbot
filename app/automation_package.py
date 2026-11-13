@@ -19,6 +19,7 @@ if __package__ in (None, ''):
 
 from wbot.elements import _record as validate_element_record
 from wbot.xzip import _member_path
+from app.project_template import project_template
 
 
 MANIFEST = 'wbot.json'
@@ -281,16 +282,10 @@ def _write_new_directory(destination, contents):
 def create_project(directory, name=None):
     """Create an explicitly declared starter project in a new directory."""
     directory = Path(directory).absolute()
-    manifest = {'schemaVersion': 1, 'name': name or directory.name, 'version': '0.1.0',
-                'entry': 'main.py', 'files': ['main.py'], 'requirements': {},
-                'parameters': {'name': {'type': 'string', 'default': 'WBot', 'description': '问候对象'}}}
+    files = project_template(name or directory.name)
+    manifest = json.loads(files[MANIFEST])
     validate_manifest(manifest)
-    script = ('from wbot import runtime\n\n'
-              'parameters = runtime.parameters()\n'
-              'message = f"你好，{parameters[\'name\']}"\n'
-              'print(message)\n'
-              'runtime.set_result({"message": message})\n')
-    _write_new_directory(directory, {MANIFEST: _json_bytes(manifest), 'main.py': script.encode('utf-8')})
+    _write_new_directory(directory, {name: content.encode('utf-8') for name, content in files.items()})
     return manifest
 
 

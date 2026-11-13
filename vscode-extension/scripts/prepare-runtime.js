@@ -27,7 +27,7 @@ function copyTree(source, target, filter, directoryFilter = () => true) {
   }
 }
 fs.mkdirSync(path.join(dest,'app'),{recursive:true});
-for(const name of ['__init__.py','automation_package.py','processes.py'])fs.copyFileSync(path.join(root,'app',name),path.join(dest,'app',name));
+for(const name of ['__init__.py','automation_package.py','project_template.py','processes.py'])fs.copyFileSync(path.join(root,'app',name),path.join(dest,'app',name));
 copyTree(path.join(root, 'wbot'), path.join(dest, 'wbot'), name => name.endsWith('.py') || name === 'py.typed');
 fs.mkdirSync(path.join(dest, 'wheels'), {recursive:true});
 fs.copyFileSync(wheel, path.join(dest, 'wheels/wbot-0.1.1-py3-none-any.whl'));

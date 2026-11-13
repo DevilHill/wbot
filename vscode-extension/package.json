@@ -2,7 +2,7 @@
   "name": "wbot-studio",
   "displayName": "WBot 开发工具",
   "description": "为 wbot Python SDK 提供开发辅助、本地元素库管理，并发布自动化到 Assistant 或 OC。",
-  "version": "0.9.1",
+  "version": "0.10.0",
   "publisher": "marswei",
   "license": "MIT",
   "engines": {
@@ -44,7 +44,7 @@
     "commands": [
       {
         "command": "wbot.initProject",
-        "title": "初始化自动化项目",
+        "title": "新建自动化项目（含虚拟环境）",
         "category": "WBot",
         "icon": "$(new-folder)"
       },
@@ -488,7 +488,7 @@
           "type": "string",
           "default": "",
           "scope": "machine-overridable",
-          "description": "Python 可执行文件路径，不含命令行参数。留空时使用 Python 扩展的当前解释器、项目 .venv 或 PATH 中的 python。"
+          "description": "Python 可执行文件路径，不含命令行参数，支持 ${workspaceFolder}。可为每个项目单独配置；留空时使用 Python 扩展的当前解释器、项目 .venv 或 PATH 中的 python。"
         },
         "wbot.scriptArgs": {
           "type": "array",
@@ -510,7 +510,7 @@
   "scripts": {
     "prepare-runtime": "node scripts/prepare-runtime.js",
     "test": "node --test test/core.test.js test/bridge.test.js test/code-only.test.js test/project.test.js test/assistant-client.test.js test/shared-elements.test.js test/shared-elements.integration.test.js test/ui-polish.test.js test/publish.test.js test/completions.test.js test/discovery.test.js test/connections.test.js",
-    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.9.1.vsix",
+    "package": "npm run prepare-runtime && vsce package --no-dependencies --out ../dist/wbot-studio-0.10.0.vsix",
     "package:marketplace": "npm run prepare-runtime && node scripts/package-marketplace.js"
   },
   "devDependencies": {

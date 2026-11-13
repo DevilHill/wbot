@@ -17,6 +17,11 @@ function libraryPath(value) {
   return value;
 }
 function pyString(value) { return JSON.stringify(String(value)).replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029'); }
+function configuredPythonPath(value, folder) {
+  if (!value.includes('${workspaceFolder}')) return value;
+  if (!folder) throw new Error('项目 Python 路径需要先打开对应的工作区文件夹');
+  return value.replaceAll('${workspaceFolder}', folder);
+}
 function elementCode(record, options) {
   return 'from wbot import web, selector\n\n' +
     `browser = web.get(base_url=${pyString(bridgeUrl(options.baseUrl))})\n` +
@@ -73,4 +78,4 @@ function request(base, endpoint, body, timeout = 10000) {
     req.end(data);
   });
 }
-module.exports = {bridgeUrl, libraryPath, pyString, elementCode, scriptTemplate, pickedRecord, scopeMatches, request};
+module.exports = {bridgeUrl, libraryPath, pyString, configuredPythonPath, elementCode, scriptTemplate, pickedRecord, scopeMatches, request};

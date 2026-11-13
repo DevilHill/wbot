@@ -95,8 +95,9 @@ function activate(context) {
     }
   }
   async function pythonExecutable(resource) {
+    const folder = resource && vscode.workspace.getWorkspaceFolder(resource) || vscode.workspace.workspaceFolders?.[0];
     const configured = settings(resource).pythonPath;
-    if (configured) return configured;
+    if (configured) return core.configuredPythonPath(configured, folder?.uri.fsPath);
     const extension = vscode.extensions.getExtension('ms-python.python');
     if (extension) {
       try {
@@ -105,7 +106,6 @@ function activate(context) {
         if (env) { const resolved = await py.environments.resolveEnvironment(env); if (resolved?.executable?.uri) return resolved.executable.uri.fsPath; }
       } catch (error) { output.appendLine('读取 Python 扩展解释器：' + error.message); }
     }
-    const folder = resource && vscode.workspace.getWorkspaceFolder(resource) || vscode.workspace.workspaceFolders?.[0];
     if (folder) {
       const candidate = path.join(folder.uri.fsPath, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
       try { await fs.access(candidate); return candidate; } catch {}

@@ -1,4 +1,4 @@
-"""构建 Windows Qt Assistant 便携目录，携带独立的任务 Python。
+"""构建 Windows Qt Assistant 便携目录，携带独立的后台服务 Python。
 
 在安装 requirements-assistant.txt 和 PyInstaller 的 Python 中运行本脚本。
 构建只复制明确的 CPython 运行文件、依赖和执行源码，不复制开发环境。
@@ -108,7 +108,7 @@ def copy_runtime(bundle):
     app = source_root / 'app'
     assistant = app / 'assistant'
     assistant.mkdir(parents=True)
-    for name in ('__init__.py', 'automation_package.py', 'assistant_release.py', 'processes.py',
+    for name in ('__init__.py', 'automation_package.py', 'portable_package.py', 'project_template.py', 'assistant_release.py', 'processes.py',
                  'server.py', 'ws_bridge.py', 'ai_client.py', 'xpath_engine.py', 'extension_installer.py'):
         shutil.copy2(ROOT / 'app' / name, app / name)
     copy_tree(ROOT / 'extension', source_root / 'extension')
@@ -187,14 +187,18 @@ print(json.dumps({'python':sys.version.split()[0], 'wbot':m.version('wbot'), 'lx
         capture_output=True, text=True, encoding='utf-8', timeout=20)
     with tempfile.TemporaryDirectory(prefix='assistant-bundle-check-') as temporary:
         state = Path(temporary).resolve() / 'state'
+        from app.automation_package import create_project
+        from tests.flow_environment import prepare_environment
+        project = Path(temporary).resolve() / 'flow'
+        create_project(project, 'portable-check')
+        prepare_environment(project)
         command = [str(interpreter), '-m', 'app.assistant']
         try:
             run([*command, 'start', '--state-dir', str(state), '--port', '0'], cwd=source_root,
                 env=dict(os.environ, WBOT_BROWSER_PORT='0', WBOT_ELEMENT_LIBRARY=str(Path(temporary) / 'elements.sqlite3')),
                 capture_output=True, text=True, encoding='utf-8', timeout=25)
-            # 由便携运行环境自己构建、导入并执行，校验冻结界面之外的真实任务路径。
+            # 流程环境由构建验证端准备，便携 Assistant 只负责托管。
             check = '''import importlib.metadata, json, pathlib, tempfile, time, sys
-from app.automation_package import create_project, build_package
 from app.assistant.lifecycle import _read_metadata, _request
 state = pathlib.Path(sys.argv[1]); metadata = _read_metadata(state)
 browser = _request(metadata, '/api/browser')
@@ -206,26 +210,28 @@ prepared = _request(metadata, '/api/browser', {'path':'/api/extension/prepare'})
 assert (pathlib.Path(prepared['directory']) / 'manifest.json').is_file()
 assert browser['bridge_url'] in (pathlib.Path(prepared['directory']) / 'background.js').read_text(encoding='utf-8')
 print('便携包内置元素服务和浏览器扩展资源验证通过')
-with tempfile.TemporaryDirectory() as directory:
-    project = pathlib.Path(directory) / 'demo'
-    manifest = create_project(project, 'portable-check')
-    manifest['requirements'] = {name: importlib.metadata.version(name) for name in ('wbot', 'lxml')}
-    (project / 'wbot.json').write_text(json.dumps(manifest), encoding='utf-8')
-    (project / 'main.py').write_text('from wbot import runtime\\nprint("portable-ok")\\nruntime.set_result({"portable": True})\\n', encoding='utf-8')
-    archive = build_package(project)
-    package = _request(metadata, '/api/packages', {'path':str(archive)})['package']
-    job = _request(metadata, '/api/jobs', {'package_id':package['id'], 'parameters':{}, 'request_id':'portable-check'})['job']
-    deadline=time.monotonic()+15
-    while time.monotonic()<deadline:
-        job=_request(metadata, '/api/jobs/'+job['id'])['job']
-        if job['state'] in ('succeeded','failed','stopped'): break
-        time.sleep(.1)
-    assert job['state']=='succeeded', job
-    assert job['result']=={'portable':True}, job
-    assert 'portable-ok' in _request(metadata, '/api/jobs/'+job['id']+'/log')['log']
-    print('便携包真实作业执行通过')
+project = pathlib.Path(sys.argv[2])
+manifest = json.loads((project / 'wbot.json').read_text(encoding='utf-8'))
+manifest['requirements'] = {name: importlib.metadata.version(name) for name in ('wbot', 'lxml')}
+(project / 'wbot.json').write_text(json.dumps(manifest), encoding='utf-8')
+(project / 'main.py').write_text('from wbot import runtime\\nprint("portable-ok")\\nruntime.set_result({"portable": True})\\n', encoding='utf-8')
+from urllib.error import HTTPError
+try:
+    package = _request(metadata, '/api/projects', {'path':str(project)})['package']
+except HTTPError as error:
+    raise RuntimeError(error.read().decode('utf-8')) from error
+job = _request(metadata, '/api/jobs', {'package_id':package['id'], 'parameters':{}, 'request_id':'portable-check'})['job']
+deadline=time.monotonic()+15
+while time.monotonic()<deadline:
+    job=_request(metadata, '/api/jobs/'+job['id'])['job']
+    if job['state'] in ('succeeded','failed','stopped'): break
+    time.sleep(.1)
+assert job['state']=='succeeded', job
+assert job['result']=={'portable':True}, job
+assert 'portable-ok' in _request(metadata, '/api/jobs/'+job['id']+'/log')['log']
+print('便携包真实作业执行通过')
 '''
-            result = run([str(interpreter), '-I', '-X', 'utf8', '-c', check, str(state)], cwd=Path(temporary),
+            result = run([str(interpreter), '-I', '-X', 'utf8', '-c', check, str(state), str(project)], cwd=Path(temporary),
                          capture_output=True, text=True, encoding='utf-8', timeout=25)
             print(result.stdout.strip())
         finally:
@@ -288,6 +294,9 @@ def verify_remote_connection(bundle):
                 'runtime.set_result({"portable_remote": True, "python": sys.executable, "wbot": wbot.__file__})\n',
                 encoding='utf-8')
             package = service.import_package(build_package(project))
+            from tests.flow_environment import prepare_environment
+            prepare_environment(project)
+            _request(metadata, '/api/projects', {'path': str(project)})
             process = service.create_process({'name': '便携远程执行', 'device_id': device['id'],
                                               'package_id': package['id']})
             job = service.run_process(process['id'], {}, 'portable-remote-check')
@@ -299,9 +308,9 @@ def verify_remote_connection(bundle):
                 time.sleep(0.1)
             if job['state'] != 'succeeded' or not job['result'].get('portable_remote'):
                 raise RuntimeError(f'便携远程任务未成功：{job["state"]} {job["error"]}')
-            if any(not Path(job['result'][key]).resolve().is_relative_to(bundle.resolve())
+            if any(not Path(job['result'][key]).resolve().is_relative_to((project / '.venv').resolve())
                    for key in ('python', 'wbot')):
-                raise RuntimeError('远程任务未使用随包 Python 和 wbot')
+                raise RuntimeError('远程任务未使用流程自带的 Python 和 wbot')
             if 'portable-remote-ok' not in service.read_log(job['id'])['log']:
                 raise RuntimeError('远程任务未回报日志')
             print('便携后台设置、OC 绑定审批、下载执行与结果日志回报通过')
@@ -316,7 +325,7 @@ def verify_remote_connection(bundle):
 
 def verify_desktop(bundle):
     """无可见窗口地验证冻结 Qt 与它实际启动的独立后端。"""
-    from app.automation_package import build_package, create_project
+    from app.automation_package import create_project
     from app.assistant.lifecycle import _read_metadata, _request, service_status
 
     with tempfile.TemporaryDirectory(prefix='assistant-desktop-check-') as temporary:
@@ -356,7 +365,9 @@ def verify_desktop(bundle):
                 'import time\nfrom wbot import runtime\ntime.sleep(2)\n'
                 'print("continued-after-ui")\nruntime.set_result({"continued": True})\n', encoding='utf-8')
             metadata = _read_metadata(state)
-            package = _request(metadata, '/api/packages', {'path': str(build_package(project))})['package']
+            from tests.flow_environment import prepare_environment
+            prepare_environment(project)
+            package = _request(metadata, '/api/projects', {'path': str(project)})['package']
             job = _request(metadata, '/api/jobs', {
                 'package_id': package['id'], 'parameters': {}, 'request_id': 'continue-after-ui'})['job']
             deadline = time.monotonic() + 10

@@ -40,7 +40,8 @@ class AssistantClient(QObject):
             request = QNetworkRequest(QUrl(metadata['url'] + path))
             request.setRawHeader(b'X-WBot-Token', metadata['token'].encode('utf-8'))
             request.setAttribute(QNetworkRequest.Attribute.Http2AllowedAttribute, False)
-            request.setTransferTimeout(self.timeout_ms)
+            timeout_ms = max(self.timeout_ms, 120000) if path in ('/api/packages', '/api/projects') and method == 'POST' else self.timeout_ms
+            request.setTransferTimeout(timeout_ms)
             if method == 'POST':
                 content = json.dumps(body if body is not None else {}, ensure_ascii=False,
                                      allow_nan=False).encode('utf-8')
@@ -110,7 +111,7 @@ class AssistantClient(QObject):
         reply.readyRead.connect(read_content)
         reply.finished.connect(finished)
         timer.timeout.connect(timed_out)
-        timer.start(self.timeout_ms)
+        timer.start(timeout_ms)
         return reply
 
     def _notify_error(self, callback, message):

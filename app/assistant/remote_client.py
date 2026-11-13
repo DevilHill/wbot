@@ -8,10 +8,10 @@ from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request, build_opener, ProxyHandler
 
 from .lifecycle import NoRedirect
+from app.automation_package import MAX_ARCHIVE_BYTES
 
 
 MAX_RESPONSE_BYTES = 8 * 1024 * 1024
-MAX_ARCHIVE_BYTES = 68 * 1024 * 1024
 
 
 def normalize_server_url(value):
@@ -108,8 +108,8 @@ class GatewayClient:
             raise ValueError('OC 发布包地址与当前作业不匹配')
         expected_size = command.get('package_size')
         if type(expected_size) is not int or not 0 < expected_size <= MAX_ARCHIVE_BYTES:
-            raise ValueError('OC 发布包大小无效或超过 68 MiB')
-        self.download_file(endpoint, destination, expected_size, command.get('package_sha256'), stop)
+            raise ValueError('OC 发布包大小无效或超过 516 MiB')
+        self.download_file(endpoint, destination, expected_size, command.get('package_sha256'), stop, timeout=600)
 
     def download_file(self, endpoint, destination, expected_size, expected_digest, stop, *, timeout=120, on_progress=None):
         digest = hashlib.sha256()

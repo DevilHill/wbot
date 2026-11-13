@@ -111,6 +111,15 @@ class BrowserService:
         path = request.get('path')
         if path == '/api/extension/prepare' and set(request) == {'path'}:
             return self.prepare_extension()
+        if path == '/api/extension/install' and set(request) == {'path', 'body'}:
+            body = request['body']
+            if not isinstance(body, dict) or set(body) != {'browser'} or body['browser'] not in ('chrome', 'edge'):
+                raise ValueError('请选择 Chrome 或 Edge')
+            from app.extension_installer import open_extension_manager
+            result = self.prepare_extension()
+            result['management_url'] = body['browser'] + '://extensions/'
+            result['opened'] = open_extension_manager(body['browser'])
+            return result
         if not isinstance(path, str) or path not in READ_PATHS | WRITE_PATHS or set(request) - {'path', 'body'}:
             raise ValueError('不支持的元素服务接口')
         body = request.get('body')

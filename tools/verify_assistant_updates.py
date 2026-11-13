@@ -17,10 +17,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from app.assistant.lifecycle import _read_metadata, service_status
 from app.assistant.update_worker import wait_process
-from app.automation_package import build_package, create_project
+from app.automation_package import create_project
 from app.oc.service import OcService
 from app.oc.agent_server import create_agent_server
 from build_assistant import stop_verified_service
+from tests.flow_environment import prepare_environment
 
 
 def call(state, endpoint, body=None):
@@ -112,7 +113,8 @@ with tempfile.TemporaryDirectory(prefix='online-update-check-', dir=ROOT / 'buil
         project = root / 'job'
         create_project(project, 'update-preservation')
         (project / 'main.py').write_text('import time\nfrom wbot import runtime\ntime.sleep(3)\nruntime.set_result({"retained": True})\n')
-        package = call(state, '/api/packages', {'path': str(build_package(project))})['package']
+        prepare_environment(project)
+        package = call(state, '/api/projects', {'path': str(project)})['package']
         job = call(state, '/api/jobs', {'package_id': package['id'], 'parameters': {}})['job']
         from urllib.error import HTTPError
         try:
@@ -130,6 +132,9 @@ with tempfile.TemporaryDirectory(prefix='online-update-check-', dir=ROOT / 'buil
         until(lambda: call(state, '/api/health')['version'] == target_version and not call(state, '/api/health')['updating'])
         assert call(state, '/api/jobs/' + job['id'])['job']['result'] == {'retained': True}
         assert call(state, '/api/settings')['settings']['device_id'] == device['id']
+        after_update = call(state, '/api/jobs', {'package_id': package['id'], 'parameters': {}})['job']
+        until(lambda: call(state, '/api/jobs/' + after_update['id'])['job']['state'] == 'succeeded')
+        assert call(state, '/api/jobs/' + after_update['id'])['job']['result'] == {'retained': True}
         assert 'mode=dark' in (state / 'appearance.ini').read_text()
         print('PASS: real portable upgrade via Qt button with clean GUI exit, busy rejection, GUI readiness, task/connection/theme preservation', flush=True)
 

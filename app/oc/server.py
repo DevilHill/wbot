@@ -1,6 +1,7 @@
 """为 React 管理端提供同源 API 与构建后的静态资源。"""
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from app.assistant_release import MAX_RELEASE_BYTES
+from app.automation_package import MAX_ARCHIVE_BYTES
 import json
 import logging
 import mimetypes
@@ -17,7 +18,7 @@ from . import auth_http
 
 
 MAX_JSON_BYTES = 2 * 1024 * 1024
-MAX_UPLOAD_BYTES = 68 * 1024 * 1024
+MAX_UPLOAD_BYTES = MAX_ARCHIVE_BYTES
 DEFAULT_ASSISTANT_DIR = Path.home() / '.wbot-assistant'
 
 

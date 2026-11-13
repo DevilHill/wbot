@@ -2,7 +2,42 @@
 
 Assistant 使用 **PySide6 + Qt Widgets** 提供本机小窗口，包含自动化搜索、发布包导入、参数填写、运行记录、日志和 JSON 结果。Qt 界面与后台执行服务是独立进程：关闭窗口收起到系统托盘，已接受的任务继续运行；重新打开可查看原作业。系统没有可用托盘时，关闭窗口退出界面，后台服务仍继续运行。
 
-当前是支持本机与跨电脑执行的开发预览。Studio 负责开发和构建，Assistant 负责本机使用与执行；[OC 管理端](oc.md) 可审批设备绑定、管理包、部署流程，并向已批准的远程 Assistant 手动派发作业。新版 OC 在独立的 wbot_oc 仓库中提供组织账号、角色权限、任务调度与云端部署。完整产品目标见 [需求架构](product-requirements.md)，本页仅说明当前代码可用的行为。
+从 Assistant 0.11.0 起，支持流程独立环境托管与跨电脑交付，停止使用旧版共享解释器。Studio 在开发端创建项目及 `.venv`，并将 Python 和已安装依赖打入流程发布包。Assistant 负责校验、解压、进程托管、参数、日志和结果，不创建虚拟环境、不运行 pip，也不回退到宿主 Python。[OC 管理端](oc.md) 可审批设备、管理发布包并派发任务。
+
+## 流程独立环境托管（0.11.0 起）
+
+1. 在 VS Code 执行“新建自动化项目（含虚拟环境）”，或在目标机器的流程目录中准备 `.venv` 与全部依赖。环境需要 Python 3.10+，禁止 `--system-site-packages`；非 Windows 平台使用 `venv --copies`。
+2. 打开 Assistant 0.11.0 或更新版本，在“我的自动化”点击“托管流程”，选择包含 `wbot.json` 和 `.venv` 的目录。登记时校验解释器和清单依赖，并保存声明代码的不可变副本。
+3. 选择流程、填写参数后运行。Assistant 使用该目录 `.venv/Scripts/python.exe`（非 Windows 为 `.venv/bin/python`）；不会向子进程注入宿主 SDK 路径。使用 WBot API 的流程需要自行安装 SDK；纯标准库脚本不需要安装 WBot。
+4. 同一版本可重复登记相同目录；更换代码、依赖或部署目录应发布新版本，并为新版本准备独立目录和环境。不同流程版本不能共享同一个已登记目录。
+
+本机接口为 `POST /api/projects`，请求体为 `{"path":"D:/flows/example"}`，沿用现有本机会话授权。已登记信息保存在 Assistant 数据目录，重启后仍有效。任务使用独立工作目录，环境始终留在流程目录中；每次启动都重新检查环境与依赖。
+
+旧 `.wbot.zip` 仍可导入和查看，但未登记运行环境时不允许执行，也不会回退到宿主 Python。已导入包可以通过登记内容完全一致的项目目录补上环境。OC 下发同名同版本、内容相同的包不会覆盖本机环境绑定；没有预先部署的环境时明确报告失败。
+
+本机托管时，基础 Python 和流程目录应位于 Assistant 安装目录之外，避免程序升级影响流程。跨电脑请使用下面的完整环境发布包，不能直接复制普通 `.venv`。
+
+## 跨电脑打包、传输和部署（0.11.0 起）
+
+1. 在 Windows x64 开发电脑中准备项目 `.venv`，安装并验证业务依赖，选择项目自己的 Python。执行 VS Code 的 **WBot: 构建自动化发布包**。命令行等价入口为：
+
+   ```powershell
+   .\my-flow\.venv\Scripts\python.exe D:\wbot\app\automation_package.py build .\my-flow --with-runtime
+   ```
+
+2. 构建工具生成 `schemaVersion=2` 的 `.wbot.zip`，包含声明的业务代码、完整 Python 标准库、Python DLL、项目 site-packages 和逐文件 SHA256。`runtime` 记录平台、Python 精确版本及 `_runtime/python.exe`；依赖版本取自项目实际环境。源 `wbot.json` 和 `.venv` 保持不变。
+3. 离线传输时，将 ZIP 复制到目标电脑，在新版 Assistant 点击“导入”。联网交付时，从插件发布到兼容新版协议的 OC，再由 OC 部署和派发；Assistant 下载后验证并解压，不需要预先登记目录，也不需要联网安装 Python 或依赖。
+4. 每个流程版本独占 Assistant 数据目录中的 `packages/<name>@<version>/_runtime`。每次启动校验整个包，业务代码复制到独立作业目录；运行环境不重复复制。Assistant 升级不替换这些环境。同名同版本内容不同会被拒绝，应增加流程版本重新发布。
+
+当前交付目标是 **Windows x64、相同兼容操作系统**。构建工具拒绝共享系统依赖、editable 安装、外部 `.pth` 路径及无法迁移的 `.pth` 启动代码。系统驱动、Office、浏览器程序、Playwright 浏览器缓存及依赖的外部服务不属于 Python site-packages，不会自动随包迁移；需要在目标电脑另外准备。包中不提供可迁移的 pip console-script 启动器，流程应使用 Python API 或 `sys.executable -m 模块`。
+
+新版包最多 20000 个文件，单文件 128 MiB，解压总量 512 MiB，归档上限 516 MiB，清单和校验索引各 4 MiB。传输、解压、校验均采用流式读写。OC 的 Python 协议、Go 上传入口和反向代理配置需要一起升级；旧版 OC/Assistant 不支持此格式。旧 schemaVersion=1 包继续使用上面的本机环境登记方式。
+
+## 浏览器扩展安装入口
+
+Assistant 的 **设置 → 浏览器扩展** 可以选择 Chrome 或 Edge，然后点击“安装浏览器扩展”。Assistant 准备固定扩展目录、复制路径并请求所选浏览器打开扩展管理页。用户需开启“开发者模式”，点击“加载已解压的扩展程序”并选择该目录，再刷新要抓取的网页。
+
+“检测扩展连接”显示所有浏览器的连接总数，不据此判断某个个人资料已经安装。多个个人资料需要分别加载；更新后在扩展管理页重新加载。此功能不要求连接 OC，且不会写企业浏览器策略或改动用户的个人资料。手动加载流程遵循 [Chrome 官方说明](https://developer.chrome.com/docs/extensions/get-started/tutorial/hello-world#load-unpacked) 和 [Edge 官方说明](https://learn.microsoft.com/en-us/microsoft-edge/extensions/getting-started/extension-sideloading)。
 
 ## 连接新版 OC（Assistant 0.8.0 起）
 
@@ -44,7 +79,7 @@ python -m venv .venv
 
 Qt 窗口打开后：
 
-1. 在“我的自动化”点击“导入”，通过系统文件选择器选择刚构建的 `.wbot.zip`。
+1. 在“我的自动化”点击“托管流程”，选择已准备独立 `.venv` 的流程目录。单独导入 `.wbot.zip` 只登记代码，还需要绑定相同版本的流程环境。
 2. 选择 `assistant-demo`，点击“运行所选自动化”，填写 `name` 后点击“开始运行”。
 3. 在运行详情查看“执行日志”和“运行结果”；成功时得到问候日志和 `{"message": "你好，填写的名字"}` 结果。以后可从“运行记录”重新打开详情。
 
@@ -100,7 +135,7 @@ VS Code 的共享元素功能也使用这条 OC 连接。新版后台提供本�
 
 ## Windows 便携版
 
-便携版面向 Windows x64。完整解压 `WBotAssistant-windows-x64.zip` 后，双击其中的 `WBotAssistant/WBotAssistant.exe` 即可打开 Qt 窗口。包内包含 Qt、独立 Python、wbot 和 lxml；运行基础示例不需要另装 Python 或 VS Code，也不需要原仓库目录。额外业务依赖仍需按包清单准备。
+便携版面向 Windows x64。完整解压 `WBotAssistant-windows-x64.zip` 后，双击其中的 `WBotAssistant/WBotAssistant.exe` 即可打开 Qt 窗口。包内包含 Qt 及 Assistant 后台需要的 Python、wbot 和 lxml；流程运行环境由流程自行提供，与这些后台依赖分开。
 
 请保留整个 `WBotAssistant` 目录，不要只复制 EXE：
 
@@ -108,7 +143,7 @@ VS Code 的共享元素功能也使用这条 OC 连接。新版后台提供本�
 | --- | --- |
 | `WBotAssistant.exe` | 桌面入口，无参数时打开 Qt 窗口 |
 | `_internal/` | Qt 界面及其打包依赖 |
-| `python/` | 后台服务与任务使用的独立 Python |
+| `python/` | 仅供 Assistant 后台服务使用的 Python |
 | `runtime/` | 后台服务、wbot 和浏览器诊断页 |
 | `licenses/`、`checksums.sha256.json` | 第三方许可和构建时的文件校验摘要 |
 
@@ -129,14 +164,13 @@ Qt 依赖随桌面入口分发，未安装到任务 Python 中。请用 EXE 打�
 
 独立试用目录不会自动导入旧版的自动化、记录和连接设置；以后需要继续这次试用时，使用相同命令。
 
-需要额外依赖时，开发者或运维人员在便携目录使用内置解释器安装包清单要求的版本。例如为清单中声明的 `openpyxl==3.1.5` 准备环境：
+需要额外依赖时，开发者或运维人员在流程自己的目录中安装。例如为清单中声明的 `openpyxl==3.1.5` 准备环境：
 
 ```powershell
-.\python\python.exe -m ensurepip --default-pip
-.\python\python.exe -m pip install "openpyxl==3.1.5"
+.\.venv\Scripts\python.exe -m pip install "openpyxl==3.1.5"
 ```
 
-`ensurepip` 使用包内资源引导 pip；实际安装业务依赖需要可用的包源或事先准备的 wheel。不同自动化仍共用此任务环境，没有自动安装或依赖隔离。
+业务依赖安装和环境重建都属于开发、部署环节，需要可用的软件源或离线 wheel。Assistant 不提供依赖安装、共享环境或环境切换功能。
 
 开发者完成前面的源码依赖安装后，可在仓库根目录构建便携版：
 
@@ -197,7 +231,7 @@ python build_assistant.py --distpath dist/assistant-0.10.0 --release-notes docs/
 
 ## 服务命令与生命周期
 
-以下为源码方式的命令，均在仓库根目录执行；可将 `python` 换为你的虚拟环境解释器。执行服务使用**启动它的同一个 Python 环境**运行任务。
+以下为源码方式的命令，均在仓库根目录执行；可将 `python` 换为 Assistant 自身的解释器。业务任务始终使用已登记流程目录中的独立虚拟环境。
 
 | 命令 | 行为 |
 | --- | --- |
@@ -262,7 +296,7 @@ python -m app.automation_package inspect automations/my-automation/dist/my-autom
 
 | 字段 | 当前规则 |
 | --- | --- |
-| `schemaVersion` | 必须是整数 `1` |
+| `schemaVersion` | 开发清单为整数 `1`；完整环境构建产物为 `2` |
 | `name` | 1–80 位，英文字母或数字开头，只使用英文字母、数字、`_`、`-` |
 | `version` | 固定语义版本，如 `0.1.0`、`1.0.0`；不接受 `latest` |
 | `entry` | `files` 中声明的 `.py` 文件，使用项目内相对路径 |
@@ -270,12 +304,13 @@ python -m app.automation_package inspect automations/my-automation/dist/my-autom
 | `parameters` | 参数名到声明的对象；无参数时为 `{}` |
 | `requirements` | 依赖包名到精确版本的对象，如 `{"openpyxl": "3.1.5"}`；无额外依赖时为 `{}` |
 | `elements` | 可选，`wbot-elements` JSON 的相对路径，且必须同时列入 `files` |
+| `runtime` | 仅用于 schemaVersion=2，由构建工具生成，记录平台、Python 版本和包内解释器 |
 
 清单不接受上述范围外的字段。相对路径统一使用 `/`，拒绝绝对路径、`..`、链接、保留设备名和大小写冲突。包内只包含清单、白名单文件及 `checksums.sha256.json` 完整性索引。
 
 默认输出为 `<项目>/dist/<name>-<version>.wbot.zip`。`build --output PATH` 可指定完整输出文件路径，但已有文件仍不会覆盖。Assistant 允许重复导入内容完全相同的同名版本；同名同版本内容不同则拒绝。更新业务代码时提高版本并重新构建，不要直接改动已安装目录。
 
-包上限为 1000 个文件、单文件 16 MiB、总解压大小 64 MiB、清单/校验元数据各 256 KiB。导入先验证文件集合和完整性再安装；哈希不验证发布者身份，应导入自己信任的来源提供的包。
+schemaVersion=1 的包上限为 1000 个文件、单文件 16 MiB、总解压大小 64 MiB、清单/校验元数据各 256 KiB。完整环境包的上限见“跨电脑打包、传输和部署”。导入先验证文件集合和完整性再安装；哈希不验证发布者身份，应导入自己信任的来源提供的包。
 
 ## 参数与运行结果
 
@@ -306,7 +341,7 @@ runtime.set_result({"message": message})
 
 ## 依赖、工作目录与元素资产
 
-源码启动的执行服务使用对应 Python 环境，便携版新启动的服务使用包内 `python/` 环境；两者都按 `requirements` 检查已安装版本是否完全相符。它**不会自动安装依赖，也不会为不同包创建独立虚拟环境**。应由开发者先在实际运行服务的环境安装所需版本；依赖缺失或版本不同会在业务脚本开始前失败。
+源码和便携服务都使用流程自带的 `.venv`，按 `requirements` 检查已安装版本是否完全相符。环境缺失、失效、开启系统依赖共享，或依赖版本不符时明确失败；Assistant 不安装依赖，不创建环境，也不回退到自身 Python。
 
 每次作业将已安装包复制到自己的工作目录，避免业务脚本修改发布版本。相对输出路径落在该作业的 `work` 目录。工作目录隔离不限制 Python 对本机其他文件、网络或进程的访问，不是安全沙箱。
 

@@ -1,4 +1,4 @@
-export const MAX_UPLOAD_BYTES = 68 * 1024 * 1024;
+export const MAX_UPLOAD_BYTES = 516 * 1024 * 1024;
 
 export async function snapshotUploadFile(selected: File, maximum = MAX_UPLOAD_BYTES): Promise<File> {
   if (selected.size > maximum) throw new Error(`发布包不能超过 ${maximum / 1024 / 1024} MiB。`);

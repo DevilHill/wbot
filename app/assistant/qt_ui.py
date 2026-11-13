@@ -163,6 +163,11 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
         self.package_count = label('0 个自动化', 'hint')
         heading.addWidget(self.package_count)
         heading.addStretch()
+        self.host_button = QPushButton('托管流程')
+        self.host_button.setObjectName('secondary')
+        self.host_button.setAccessibleName('托管自带虚拟环境的流程目录')
+        self.host_button.clicked.connect(self.choose_project)
+        heading.addWidget(self.host_button)
         self.import_button = QPushButton('导入')
         self.import_button.setObjectName('secondary')
         self.import_button.setIcon(make_symbol_icon('import', '#007AFF', 'transparent'))
@@ -172,7 +177,7 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
         heading.addWidget(self.import_button)
         layout.addLayout(heading)
         self.empty_packages, self.empty_package_title, self.empty_package_hint = self._empty_state(
-            '添加你的第一个自动化', '导入 Studio 发布包，即可在这里运行。', 'automation')
+            '添加你的第一个自动化', '选择已准备独立虚拟环境的流程目录，开始托管。', 'automation')
         layout.addWidget(self.empty_packages, 1)
         self.package_list = QListWidget()
         self.package_list.setAccessibleName('自动化列表')
@@ -321,7 +326,8 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, package['id'])
             item.setIcon(make_symbol_icon('automation', *colors[index % len(colors)]))
             item.setSizeHint(QSize(0, 88))
-            item.setToolTip(item.text() + '\n' + package['id'])
+            item.setToolTip(item.text() + '\n' + package['id'] + '\n' +
+                            (package.get('project_path') or '尚未登记流程环境，请先托管对应流程目录'))
             self.package_list.addItem(item)
             if package['id'] == selected:
                 self.package_list.setCurrentItem(item)
@@ -330,7 +336,7 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
         self.empty_packages.setVisible(not self.package_list.count())
         self.empty_package_title.setText('没有找到自动化' if query else '添加你的第一个自动化')
         self.empty_package_hint.setText('试试其他名称，或清空搜索。' if query else
-                                        '导入 Studio 发布包，即可在这里运行。')
+                                        '选择已准备独立虚拟环境的流程目录，开始托管。')
         self.package_list.setVisible(bool(self.package_list.count()))
         self._update_enabled()
 
@@ -370,20 +376,33 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
             return
         busy = any(job['state'] in ACTIVE_STATES for job in self.jobs)
         self.import_button.setEnabled(self.connected and not self._import_busy)
-        self.run_button.setEnabled(self.connected and not busy and self._selected_id(self.package_list) is not None)
-        self.run_button.setText('后台任务运行中' if busy else '运行所选自动化')
+        self.host_button.setEnabled(self.connected and not busy and not self._import_busy)
+        selected = next((item for item in self.packages if item['id'] == self._selected_id(self.package_list)), None)
+        ready = selected is not None and bool(selected.get('project_path'))
+        self.run_button.setEnabled(self.connected and not busy and ready)
+        self.run_button.setText('后台任务运行中' if busy else
+                               '请先托管流程环境' if selected and not ready else '运行所选自动化')
         self.details_button.setEnabled(self._selected_id(self.job_list) is not None)
 
     def choose_package(self):
+        self._choose_source('导入自动化发布包', QFileDialog.FileMode.ExistingFile,
+                            self.import_package, '自动化发布包 (*.wbot.zip)')
+
+    def choose_project(self):
+        self._choose_source('选择包含 wbot.json 和 .venv 的流程目录', QFileDialog.FileMode.Directory,
+                            self.host_project)
+
+    def _choose_source(self, title, mode, selected, name_filter=None):
         if not self.connected or self._import_busy:
             return
         if self._file_dialog:
             self._file_dialog.raise_()
             return
-        self._file_dialog = QFileDialog(self, '导入自动化发布包')
-        self._file_dialog.setNameFilter('自动化发布包 (*.wbot.zip)')
-        self._file_dialog.setFileMode(QFileDialog.FileMode.ExistingFile)
-        self._file_dialog.fileSelected.connect(self.import_package)
+        self._file_dialog = QFileDialog(self, title)
+        if name_filter:
+            self._file_dialog.setNameFilter(name_filter)
+        self._file_dialog.setFileMode(mode)
+        self._file_dialog.fileSelected.connect(selected)
         self._file_dialog.finished.connect(self._file_dialog_closed)
         self._file_dialog.open()
 
@@ -394,12 +413,18 @@ class AssistantWindow(CaptionWindowMixin, QMainWindow):
             dialog.deleteLater()
 
     def import_package(self, path):
+        self._import_source(path, '/api/packages', '正在校验并导入发布包…')
+
+    def host_project(self, path):
+        self._import_source(path, '/api/projects', '正在校验流程代码及其独立虚拟环境…')
+
+    def _import_source(self, path, endpoint, message):
         if self._closed or self._import_busy or not self.connected:
             return
         self._import_busy = True
         self._update_enabled()
-        self._show_message('正在校验并导入发布包…')
-        self.client.request('POST', '/api/packages', {'path': path},
+        self._show_message(message)
+        self.client.request('POST', endpoint, {'path': path},
                             on_success=self._package_imported, on_error=self._import_failed)
 
     def _package_imported(self, response):

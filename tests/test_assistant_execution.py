@@ -9,7 +9,7 @@ import tempfile
 import time
 import unittest
 
-from app.automation_package import build_package
+from tests.flow_environment import prepare_environment
 from app.assistant.execution import ExecutionService
 
 
@@ -18,14 +18,14 @@ class ExecutionTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.state = self.root / 'state'
-        self.service = ExecutionService(self.state, python_executable=sys.executable)
+        self.service = ExecutionService(self.state)
         self.sequence = 0
 
     def tearDown(self):
         self.service.shutdown()
         self.temp.cleanup()
 
-    def package(self, script, *, name='demo', version='1.0.0', parameters=None, requirements=None, extra=None, elements=None):
+    def project(self, script, *, name='demo', version='1.0.0', parameters=None, requirements=None, extra=None, elements=None):
         self.sequence += 1
         project = self.root / f'project-{self.sequence}'
         project.mkdir()
@@ -39,7 +39,8 @@ class ExecutionTests(unittest.TestCase):
         if elements:
             manifest['elements'] = elements
         (project / 'wbot.json').write_text(json.dumps(manifest), encoding='utf-8')
-        return build_package(project, self.root / f'package-{self.sequence}.wbot.zip')
+        prepare_environment(project)
+        return project
 
     def finished(self, job_id, timeout=12):
         deadline = time.monotonic() + timeout
@@ -59,12 +60,12 @@ class ExecutionTests(unittest.TestCase):
         self.fail(f'Worker did not print {marker}: {self.service.read_log(job_id)}')
 
     def test_success_parameters_result_and_private_working_directory(self):
-        archive = self.package('from wbot import runtime\nfrom pathlib import Path\n'
+        archive = self.project('from wbot import runtime\nfrom pathlib import Path\n'
             'print("你好", flush=True)\nPath("created.txt").write_text("local")\n'
             'runtime.set_result({"name": runtime.parameters()["name"], "job": runtime.job_id()})',
             parameters={'name': {'type': 'string', 'default': '示例'}},
             extra={'app.py': 'raise RuntimeError("must not shadow worker")'})
-        package = self.service.install_package(archive)
+        package = self.service.host_project(archive)
         job = self.service.submit(package['id'], {})
         self.assertEqual(job['state'], 'preparing')
         result = self.finished(job['id'])
@@ -76,11 +77,11 @@ class ExecutionTests(unittest.TestCase):
         self.assertFalse((self.state / 'packages' / package['id'] / 'created.txt').exists())
 
     def test_versions_are_immutable_and_invalid_parameters_do_not_create_jobs(self):
-        archive = self.package('print("one")', parameters={'count': {'type': 'integer', 'required': True}})
-        package = self.service.install_package(archive)
-        self.assertEqual(self.service.install_package(archive), package)
+        archive = self.project('print("one")', parameters={'count': {'type': 'integer', 'required': True}})
+        package = self.service.host_project(archive)
+        self.assertEqual(self.service.host_project(archive), package)
         with self.assertRaises(ValueError):
-            self.service.install_package(self.package('print("changed")'))
+            self.service.host_project(self.project('print("changed")'))
         with self.assertRaises(ValueError):
             self.service.submit(package['id'], {'count': True})
         self.assertEqual(self.service.list_jobs(), [])
@@ -104,7 +105,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(len(self.service.get_job('job-204')['result']), 131072)
 
     def test_request_id_is_idempotent_but_different_payload_is_rejected(self):
-        package = self.service.install_package(self.package('print("done")',
+        package = self.service.host_project(self.project('print("done")',
             parameters={'count': {'type': 'integer', 'default': 1}}))
         first = self.service.submit(package['id'], {}, 'request-1')
         self.assertEqual(self.service.submit(package['id'], {'count': 1}, 'request-1')['id'], first['id'])
@@ -117,7 +118,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(len(self.service.list_jobs()), 1)
 
     def test_busy_and_stop_are_explicit(self):
-        package = self.service.install_package(self.package('import time\nprint("ready", flush=True)\ntime.sleep(60)'))
+        package = self.service.host_project(self.project('import time\nprint("ready", flush=True)\ntime.sleep(60)'))
         job = self.service.submit(package['id'], {})
         self.wait_for_log(job['id'], 'ready')
         with self.assertRaisesRegex(ValueError, '忙|运行'):
@@ -128,26 +129,20 @@ class ExecutionTests(unittest.TestCase):
         self.assertIsNotNone(result['exit_code'])
 
     def test_worker_error_and_missing_requirement_are_different_failures(self):
-        package = self.service.install_package(self.package('raise RuntimeError("业务错误")'))
+        package = self.service.host_project(self.project('raise RuntimeError("业务错误")'))
         job = self.finished(self.service.submit(package['id'], {})['id'])
         self.assertEqual(job['state'], 'failed')
         self.assertEqual(job['exit_code'], 1)
         self.assertIn('业务错误', self.service.read_log(job['id']))
-        package = self.service.install_package(self.package('print("MUST NOT RUN")', version='2.0.0',
-            requirements={'wbot-test-missing-distribution': '1.0.0'}))
-        job = self.finished(self.service.submit(package['id'], {})['id'])
-        self.assertEqual(job['state'], 'failed')
-        self.assertIn('依赖', job['error'])
-        self.assertNotIn('MUST NOT RUN', self.service.read_log(job['id']))
-        package = self.service.install_package(self.package('print("MUST NOT RUN")', version='3.0.0',
-            requirements={'lxml': '0.0.0'}))
-        job = self.finished(self.service.submit(package['id'], {})['id'])
-        self.assertEqual(job['state'], 'failed')
-        self.assertIn('installed', job['error'])
-        self.assertIsNone(job['exit_code'])
+        with self.assertRaisesRegex(ValueError, '依赖'):
+            self.service.host_project(self.project('print("MUST NOT RUN")', version='2.0.0',
+                requirements={'wbot-test-missing-distribution': '1.0.0'}))
+        with self.assertRaisesRegex(ValueError, 'installed'):
+            self.service.host_project(self.project('print("MUST NOT RUN")', version='3.0.0',
+                requirements={'lxml': '0.0.0'}))
 
     def test_logs_are_bounded_without_blocking_process_completion(self):
-        package = self.service.install_package(self.package('print("x" * (5 * 1024 * 1024))'))
+        package = self.service.host_project(self.project('print("x" * (5 * 1024 * 1024))'))
         job = self.finished(self.service.submit(package['id'], {})['id'])
         self.assertEqual(job['state'], 'succeeded')
         self.assertTrue(job['log_truncated'])
@@ -164,7 +159,7 @@ class ExecutionTests(unittest.TestCase):
         unrelated = subprocess.Popen([sys.executable, '-c', 'import time; time.sleep(60)'],
             creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0))
         try:
-            package = self.service.install_package(self.package(script))
+            package = self.service.host_project(self.project(script))
             job = self.service.submit(package['id'], {})
             self.wait_for_log(job['id'], 'spawned')
             deadline = time.monotonic() + 5
@@ -181,7 +176,7 @@ class ExecutionTests(unittest.TestCase):
             unrelated.wait(timeout=5)
 
     def test_invalid_output_and_modified_installed_package_fail_explicitly(self):
-        package = self.service.install_package(self.package('import os\nfrom pathlib import Path\n'
+        package = self.service.host_project(self.project('import os\nfrom pathlib import Path\n'
             'Path(os.environ["WBOT_RUN_RESULT"]).write_text("[]")'))
         job = self.finished(self.service.submit(package['id'], {})['id'])
         self.assertEqual(job['state'], 'failed')
@@ -194,7 +189,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertIsNone(job['exit_code'])
 
     def test_unlisted_files_cannot_change_installed_package_imports(self):
-        package = self.service.install_package(self.package('print("unchanged")'))
+        package = self.service.host_project(self.project('print("unchanged")'))
         (self.state / 'packages' / package['id'] / 'extra.py').write_text('print("added")')
         job = self.finished(self.service.submit(package['id'], {})['id'])
         self.assertEqual(job['state'], 'failed')
@@ -203,7 +198,7 @@ class ExecutionTests(unittest.TestCase):
     def test_package_elements_are_imported_into_job_private_library(self):
         elements = {'format': 'wbot-elements', 'version': 1, 'items': [
             {'name': '登录', 'group': '页面', 'xpath': '//button', 'description': '', 'url': ''}]}
-        package = self.service.install_package(self.package('from wbot import runtime, ElementLibrary\n'
+        package = self.service.host_project(self.project('from wbot import runtime, ElementLibrary\n'
             'runtime.set_result({"count": len(ElementLibrary().list())})',
             extra={'elements.json': json.dumps(elements)}, elements='elements.json'))
         job = self.finished(self.service.submit(package['id'], {})['id'])
@@ -211,7 +206,7 @@ class ExecutionTests(unittest.TestCase):
         self.assertEqual(job['result'], {'count': 1})
 
     def test_history_survives_restart_and_unfinished_jobs_are_not_replayed(self):
-        package = self.service.install_package(self.package('print("once")'))
+        package = self.service.host_project(self.project('print("once")'))
         job = self.finished(self.service.submit(package['id'], {})['id'])
         self.service.shutdown()
         with closing(sqlite3.connect(self.state / 'assistant.sqlite3')) as database:

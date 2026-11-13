@@ -14,12 +14,9 @@ def main():
     sys.stdin = io.StringIO('')
     sys.stdout.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
     sys.stderr.reconfigure(encoding='utf-8', errors='replace', line_buffering=True)
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     try:
-        from wbot import runtime
         context = json.loads(Path(sys.argv[1]).read_text(encoding='utf-8'))
         entry = Path(context['entry'])
-        runtime.parameters()
         sys.argv = [str(entry)]
         sys.path.insert(0, str(entry.parent))
         runpy.run_path(str(entry), run_name='__main__')

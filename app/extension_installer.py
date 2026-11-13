@@ -555,6 +555,18 @@ def _install_guided(browser: dict[str, Any], ext_dir: Path) -> dict[str, Any]:
 # --------------------------------------------------------------------------- #
 # 对外入口
 # --------------------------------------------------------------------------- #
+def open_extension_manager(browser_key: str) -> bool:
+    """Open exactly the selected installed browser; do not switch profiles or install policies."""
+    if browser_key not in ('chrome', 'edge'):
+        raise ValueError('请选择 Chrome 或 Edge')
+    browser = next((item for item in find_browsers() if item['key'] == browser_key), None)
+    if browser is None:
+        return False
+    page = 'edge://extensions/' if browser_key == 'edge' else 'chrome://extensions/'
+    _spawn(browser['path'], [page])
+    return True
+
+
 def install(strategy: str = "auto", browser_key: str = "", port: int = 8790,
             verify_timeout: float = 30.0) -> dict[str, Any]:
     if platform.system() != "Windows":

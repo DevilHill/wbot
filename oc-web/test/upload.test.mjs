@@ -25,13 +25,15 @@ test('超限文件在读取前拒绝', async () => {
   let read = false;
   Object.defineProperty(selected, 'size', { value: MAX_UPLOAD_BYTES + 1 });
   Object.defineProperty(selected, 'arrayBuffer', { value: async () => { read = true; return new ArrayBuffer(0); } });
-  await assert.rejects(snapshotUploadFile(selected), /不能超过 68 MiB/);
+  await assert.rejects(snapshotUploadFile(selected), /不能超过 516 MiB/);
   assert.equal(read, false);
 });
 
-test('客户端更新包使用独立的 128 MiB 上限，自动化包仍保持 68 MiB', async () => {
+test('客户端更新包使用独立的 128 MiB 上限，自动化包支持 516 MiB', async () => {
   const selected = new File(['release'], 'WBotAssistant.zip');
-  Object.defineProperty(selected, 'size', { value: 80 * 1024 * 1024 });
-  await assert.rejects(snapshotUploadFile(selected), /68 MiB/);
+  Object.defineProperty(selected, 'size', { value: 80 * 1024 * 1024, configurable:true });
+  assert.equal((await snapshotUploadFile(selected)).name, selected.name);
   assert.equal((await snapshotUploadFile(selected, 128 * 1024 * 1024)).name, selected.name);
+  Object.defineProperty(selected, 'size', { value: 129 * 1024 * 1024 });
+  await assert.rejects(snapshotUploadFile(selected, 128 * 1024 * 1024), /128 MiB/);
 });

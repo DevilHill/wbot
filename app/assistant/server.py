@@ -201,6 +201,13 @@ class AssistantHandler(BaseHTTPRequestHandler):
             if body:
                 raise ValueError('断开连接不接受额外参数')
             self._json(200, {'settings': self._connection().disconnect()})
+        elif path == "/api/projects":
+            if set(body) != {'path'}:
+                raise ValueError('登记流程需要且仅接受 path')
+            project = Path(self._required_text(body, 'path'))
+            if not project.is_absolute():
+                raise ValueError('请输入流程目录的本机完整路径')
+            self._json(201, {'package': execution.host_project(project)})
         elif path == "/api/packages":
             archive = Path(self._required_text(body, "path"))
             if not archive.is_absolute():

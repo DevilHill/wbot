@@ -11,6 +11,7 @@ from app.assistant.execution import ExecutionService
 from app.assistant.server import create_server
 from app.automation_package import build_package
 from app.oc.service import OcService
+from tests.flow_environment import prepare_environment
 
 
 class OcServiceTests(unittest.TestCase):
@@ -42,6 +43,8 @@ class OcServiceTests(unittest.TestCase):
         (project / 'wbot.json').write_text(json.dumps({'schemaVersion': 1, 'name': 'demo', 'version': version,
             'entry': 'main.py', 'files': ['main.py'], 'parameters': {'name': {'type': 'string', 'default': '默认'}},
             'requirements': {}}), encoding='utf-8')
+        prepare_environment(project)
+        self.execution.host_project(project)
         return self.service.import_package(build_package(project))
 
     def deploy(self, package=None):

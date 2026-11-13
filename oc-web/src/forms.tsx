@@ -40,7 +40,7 @@ export function UploadDialog({ onClose, onSaved }: FormActions) {
   }
   return <Dialog title="导入自动化包" description="上传 Studio 构建的版本，随后将它部署为可运行的流程。" onClose={onClose} busy={busy}>
     <form onSubmit={submit}><div className="dialog-body">
-      <label className={`upload-zone ${file ? 'has-file' : ''}`}><span className="upload-symbol">{file ? <FileArchive size={28} /> : <Upload size={28} />}</span><strong>{file?.name ?? '选择自动化发布包'}</strong><span>{file ? fileSize(file.size) : '.wbot.zip 或 .zip · 最大 68 MiB'}</span><input ref={fileInput} aria-label="选择自动化发布包" type="file" accept=".zip" required disabled={busy} onChange={event => { const selected = event.target.files?.[0] ?? null; void selectFile(selected); }} /></label>
+      <label className={`upload-zone ${file ? 'has-file' : ''}`}><span className="upload-symbol">{file ? <FileArchive size={28} /> : <Upload size={28} />}</span><strong>{file?.name ?? '选择自动化发布包'}</strong><span>{file ? fileSize(file.size) : '.wbot.zip 或 .zip · 最大 516 MiB'}</span><input ref={fileInput} aria-label="选择自动化发布包" type="file" accept=".zip" required disabled={busy} onChange={event => { const selected = event.target.files?.[0] ?? null; void selectFile(selected); }} /></label>
       <p className="inset-note">相同名称和版本的内容不可覆盖。更新自动化时，请先在 Studio 中增加版本号。</p>
       {error && <p className="form-error" role="alert">{error}</p>}
     </div><FormFooter busy={busy} label="导入发布包" onClose={onClose} /></form>

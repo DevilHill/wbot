@@ -28,6 +28,10 @@ class RecordingExecution:
         self.submissions.append((package_id, parameters, request_id))
         return {"id": "job-1", "state": "preparing"}
 
+    def host_project(self, path):
+        self.submissions.append(str(path))
+        return {'id': 'hosted@1.0.0'}
+
     def get_job(self, job_id):
         raise KeyError(job_id)
 
@@ -93,6 +97,15 @@ class AssistantServerTests(unittest.TestCase):
             with self.subTest(path=path, headers=headers):
                 self.assertEqual(self.request(path, body, headers)[0], 403)
         self.assertEqual(self.execution.submissions, [])
+
+    def test_project_registration_requires_local_authorization_and_absolute_directory(self):
+        auth = {'X-WBot-Token': self.server.token}
+        project = str(Path(self.execution.state_dir) / 'flow')
+        self.assertEqual(self.request('/api/projects', {'path': project})[0], 403)
+        self.assertEqual(self.request('/api/projects', {'path': 'relative'}, auth)[0], 400)
+        self.assertEqual(self.request('/api/projects', {'path': project, 'python': 'shared'}, auth)[0], 400)
+        self.assertEqual(self.request('/api/projects', {'path': project}, auth)[0], 201)
+        self.assertEqual(self.execution.submissions, [project])
 
     def test_malformed_inputs_are_rejected_before_execution(self):
         auth = {"X-WBot-Token": self.server.token}
